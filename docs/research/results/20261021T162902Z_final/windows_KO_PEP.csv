@@ -1,0 +1,5 @@
+window,fit_start,fit_end,eval_start,eval_end,cointegrated,traded,eg_p_value,hedge_ratio,return_traditional,trades_traditional,return_ml_only_logistic_regression,trades_ml_only_logistic_regression,return_hybrid_logistic_regression,trades_hybrid_logistic_regression,return_ml_only_random_forest,trades_ml_only_random_forest,return_hybrid_random_forest,trades_hybrid_random_forest,return_ml_only_prevalence_baseline,trades_ml_only_prevalence_baseline
+1,2022-12-29,2024-12-31,2025-01-02,2025-07-07,False,False,0.9178441186642935,0.489596031166701,0.0,0,0.0,0,0.0,0,0.0,0,0.0,0,0.0,0
+2,2023-07-03,2025-07-07,2025-07-08,2026-01-05,False,False,0.6258316021199446,-0.5210978978274418,0.0,0,0.0,0,0.0,0,0.0,0,0.0,0,0.0,0
+3,2024-01-02,2026-01-05,2026-01-06,2026-07-08,False,False,0.26209711293245463,-0.49748149834790717,0.0,0,0.0,0,0.0,0,0.0,0,0.0,0,0.0,0
+4,2024-07-03,2026-07-08,2026-07-09,2026-09-30,False,False,0.9332647374765324,0.1021701242799809,0.0,0,0.0,0,0.0,0,0.0,0,0.0,0,0.0,0

@@ -1,0 +1,10 @@
+# Normalise line endings for ordinary text files.
+* text=auto
+
+# Files whose raw-byte SHA-256 is recorded in docs/research/freeze.json or the run manifests.
+# Store them byte-for-byte (no line-ending conversion) so the published hashes verify on every platform.
+config/research_v2.yaml -text
+docs/research/PREREGISTRATION.md -text
+docs/research/freeze.json -text
+docs/research/holdout_evaluated.json -text
+docs/research/results/** -text

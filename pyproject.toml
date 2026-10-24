@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "statarb"
+version = "0.1.0"
+description = "StatArb Research Lab: a reproducible research platform for cointegration-based pairs trading."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "numpy>=2.0,<3",
+    "pandas>=2.2,<4",
+    "scipy>=1.13,<2",
+    "statsmodels>=0.14.2,<0.16",
+    "scikit-learn>=1.5,<2",
+    "PyYAML>=6.0,<7",
+    "plotly>=5.22,<8",
+]
+
+[project.optional-dependencies]
+data = ["yfinance>=0.2.50,<2"]
+app = ["streamlit>=1.36,<2"]
+dev = ["pytest>=8.0,<10", "nbformat>=5.10,<6", "nbclient>=0.10,<1", "ipykernel>=6.29,<8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra"
+markers = ["slow: end-to-end checks that take several seconds"]
+filterwarnings = [
+    # yfinance / plotly may emit deprecation noise unrelated to this project
+    "ignore::DeprecationWarning:yfinance.*",
+]

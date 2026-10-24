@@ -1,0 +1,230 @@
+{
+  "base_periods": {
+    "test": {
+      "completed_trades": 3.0,
+      "cumulative_return": 0.07749817172642914,
+      "gross_cumulative_return": 0.08535469343083402,
+      "max_drawdown": -0.036569192525313876,
+      "pct_time_invested": 0.4533333333333333,
+      "sharpe_ratio": 0.9292583823494261,
+      "total_borrow_costs": 1379.1418281428132,
+      "total_transaction_costs": 6125.140688370098
+    },
+    "train": {
+      "completed_trades": 6.0,
+      "cumulative_return": 0.20185429659308962,
+      "gross_cumulative_return": 0.21743830241007545,
+      "max_drawdown": -0.01948269191703733,
+      "pct_time_invested": 0.10666666666666667,
+      "sharpe_ratio": 1.399782507291777,
+      "total_borrow_costs": 1051.8775153417373,
+      "total_transaction_costs": 13169.862532788306
+    },
+    "validation": {
+      "completed_trades": 4.0,
+      "cumulative_return": 0.1180279148681318,
+      "gross_cumulative_return": 0.1274622586732319,
+      "max_drawdown": -0.020252039689216517,
+      "pct_time_invested": 0.16666666666666666,
+      "sharpe_ratio": 2.6471516202096335,
+      "total_borrow_costs": 487.8944178531061,
+      "total_transaction_costs": 8553.006915560924
+    }
+  },
+  "base_walk_forward": {
+    "completed_trades": 8.0,
+    "cumulative_return": 0.16661549293305677,
+    "gross_cumulative_return": 0.18739784744940668,
+    "max_drawdown": -0.05678485462131433,
+    "pct_time_invested": 0.1857429718875502,
+    "sharpe_ratio": 0.7946772214438896,
+    "total_borrow_costs": 2064.4606143726214,
+    "total_transaction_costs": 17062.491453734227
+  },
+  "base_walk_forward_windows": 8,
+  "classification": {
+    "logistic_regression": {
+      "test": {
+        "accuracy": 0.5962732919254659,
+        "brier_score": 0.27197340748300847,
+        "log_loss": 0.8002700195223407,
+        "n_samples": 161.0,
+        "positive_rate": 0.43478260869565216,
+        "precision": 0.5263157894736842,
+        "recall": 0.7142857142857143,
+        "roc_auc": 0.6255886970172686
+      },
+      "train": {
+        "accuracy": 0.6334405144694534,
+        "brier_score": 0.2222579537474069,
+        "log_loss": 0.6341106561275363,
+        "n_samples": 311.0,
+        "positive_rate": 0.5852090032154341,
+        "precision": 0.7125,
+        "recall": 0.6263736263736264,
+        "roc_auc": 0.6905613766078883
+      },
+      "validation": {
+        "accuracy": 0.6511627906976745,
+        "brier_score": 0.22025572985851027,
+        "log_loss": 0.6247743610132678,
+        "n_samples": 86.0,
+        "positive_rate": 0.5813953488372093,
+        "precision": 0.6612903225806451,
+        "recall": 0.82,
+        "roc_auc": 0.7061111111111111
+      }
+    },
+    "random_forest": {
+      "test": {
+        "accuracy": 0.5714285714285714,
+        "brier_score": 0.2510813639674804,
+        "log_loss": 0.6971646362293598,
+        "n_samples": 161.0,
+        "positive_rate": 0.43478260869565216,
+        "precision": 0.5043478260869565,
+        "recall": 0.8285714285714286,
+        "roc_auc": 0.5946624803767661
+      },
+      "train": {
+        "accuracy": 0.7041800643086816,
+        "brier_score": 0.2078288194174879,
+        "log_loss": 0.6056639767918802,
+        "n_samples": 311.0,
+        "positive_rate": 0.5852090032154341,
+        "precision": 0.7647058823529411,
+        "recall": 0.7142857142857143,
+        "roc_auc": 0.7745123093960304
+      },
+      "validation": {
+        "accuracy": 0.6162790697674418,
+        "brier_score": 0.2326732725681351,
+        "log_loss": 0.6583017172858603,
+        "n_samples": 86.0,
+        "positive_rate": 0.5813953488372093,
+        "precision": 0.6349206349206349,
+        "recall": 0.8,
+        "roc_auc": 0.6072222222222222
+      }
+    }
+  },
+  "comparisons": {
+    "test": {
+      "A. Traditional (z-score)": {
+        "completed_trades": 3.0,
+        "cumulative_return": 0.07749817172642914,
+        "total_transaction_costs": 6125.140688370098
+      },
+      "B. ML-only (LR)": {
+        "completed_trades": 9.0,
+        "cumulative_return": 0.03932101565238333,
+        "total_transaction_costs": 18369.739488261286
+      },
+      "B. ML-only (RF)": {
+        "completed_trades": 8.0,
+        "cumulative_return": 0.06035569839913424,
+        "total_transaction_costs": 16258.5100728994
+      },
+      "C. Hybrid (LR)": {
+        "completed_trades": 3.0,
+        "cumulative_return": 0.08009638657846607,
+        "total_transaction_costs": 6163.593146543601
+      },
+      "C. Hybrid (RF)": {
+        "completed_trades": 3.0,
+        "cumulative_return": 0.07749817172642914,
+        "total_transaction_costs": 6125.140688370098
+      }
+    },
+    "train": {
+      "A. Traditional (z-score)": {
+        "completed_trades": 6.0,
+        "cumulative_return": 0.20185429659308962,
+        "total_transaction_costs": 13169.862532788306
+      },
+      "B. ML-only (LR)": {
+        "completed_trades": 25.0,
+        "cumulative_return": 0.415447270617459,
+        "total_transaction_costs": 60449.12852488365
+      },
+      "B. ML-only (RF)": {
+        "completed_trades": 28.0,
+        "cumulative_return": 0.4673637671577986,
+        "total_transaction_costs": 68848.09941235918
+      },
+      "C. Hybrid (LR)": {
+        "completed_trades": 6.0,
+        "cumulative_return": 0.20185429659308962,
+        "total_transaction_costs": 13169.862532788306
+      },
+      "C. Hybrid (RF)": {
+        "completed_trades": 6.0,
+        "cumulative_return": 0.20761003224839403,
+        "total_transaction_costs": 13229.596701853792
+      }
+    },
+    "validation": {
+      "A. Traditional (z-score)": {
+        "completed_trades": 4.0,
+        "cumulative_return": 0.1180279148681318,
+        "total_transaction_costs": 8553.006915560924
+      },
+      "B. ML-only (LR)": {
+        "completed_trades": 10.0,
+        "cumulative_return": 0.15295916511864727,
+        "total_transaction_costs": 21432.111305429717
+      },
+      "B. ML-only (RF)": {
+        "completed_trades": 8.0,
+        "cumulative_return": 0.13724499545241686,
+        "total_transaction_costs": 17159.184419061407
+      },
+      "C. Hybrid (LR)": {
+        "completed_trades": 4.0,
+        "cumulative_return": 0.1180279148681318,
+        "total_transaction_costs": 8553.006915560924
+      },
+      "C. Hybrid (RF)": {
+        "completed_trades": 4.0,
+        "cumulative_return": 0.1180279148681318,
+        "total_transaction_costs": 8553.006915560924
+      }
+    }
+  },
+  "ml_walk_forward": {
+    "A. Traditional (z-score)": {
+      "completed_trades": 8.0,
+      "cumulative_return": 0.16661549293305677,
+      "total_transaction_costs": 17062.491453734227
+    },
+    "B. ML-only (LR)": {
+      "completed_trades": 26.0,
+      "cumulative_return": 0.3551742793088841,
+      "total_transaction_costs": 61472.497953346814
+    },
+    "B. ML-only (RF)": {
+      "completed_trades": 33.0,
+      "cumulative_return": 0.30387706494169375,
+      "total_transaction_costs": 74442.94244374556
+    },
+    "C. Hybrid (LR)": {
+      "completed_trades": 8.0,
+      "cumulative_return": 0.18617016232274675,
+      "total_transaction_costs": 17187.010987518588
+    },
+    "C. Hybrid (RF)": {
+      "completed_trades": 7.0,
+      "cumulative_return": 0.1644307190342016,
+      "total_transaction_costs": 14742.73099097819
+    }
+  },
+  "model_params": {
+    "logistic_regression": {
+      "C": 1.0
+    },
+    "random_forest": {
+      "max_depth": 3,
+      "min_samples_leaf": 30
+    }
+  }
+}

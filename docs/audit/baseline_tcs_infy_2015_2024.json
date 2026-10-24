@@ -1,0 +1,807 @@
+{
+  "description": "Phase 1 baseline: exact reproduction of the 2015-2024 TCS.NS/INFY.NS A/B/C experiment with original settings.",
+  "reproduced_on": "2026-10-21",
+  "command": "python scripts/run_research.py --source yfinance --tickers TCS.NS INFY.NS --start 2015-01-01 --end 2024-12-31 --reveal-test",
+  "reproduction_snapshot": "reports/20261021T152215Z_TCS-NS_INFY-NS_0d0c9cc8b701",
+  "original_snapshot": "reports/20261020T171002Z_TCS-NS_INFY-NS_0d0c9cc8b701",
+  "reproduction_exact": "62 of 62 CSV tables identical (rtol 1e-12); identical input SHA-256 and config fingerprint",
+  "config_fingerprint": "0d0c9cc8b701",
+  "inputs": {
+    "asset_a": {
+      "ticker": "TCS.NS",
+      "source": "yfinance (cached)",
+      "retrieved_at": "2026-10-20T14:02:09+00:00",
+      "sha256": "86ced8309f8f2554e01e0ef3b4126b586615b9eb7813cac49193c8053f4796a0",
+      "n_rows": 2467,
+      "first_date": "2015-01-01",
+      "last_date": "2024-12-31"
+    },
+    "asset_b": {
+      "ticker": "INFY.NS",
+      "source": "yfinance (cached)",
+      "retrieved_at": "2026-10-20T14:02:09+00:00",
+      "sha256": "6885dcbca4ea0598005126dc6173bfc7e0cbffcc383a505f726d677543362e9e",
+      "n_rows": 2467,
+      "first_date": "2015-01-01",
+      "last_date": "2024-12-31"
+    }
+  },
+  "aligned_prices_sha256": "2f0b3b0e1f3f33b91a27aac1c29de48fec1c7757158f101afdafc68c79e1b3f3",
+  "price_columns": {
+    "A": "Adj Close",
+    "B": "Adj Close"
+  },
+  "splits": {
+    "train": {
+      "start": "2015-01-01",
+      "end": "2020-12-31",
+      "n_obs": 1480
+    },
+    "validation": {
+      "start": "2021-01-01",
+      "end": "2022-12-27",
+      "n_obs": 493
+    },
+    "test": {
+      "start": "2022-12-28",
+      "end": "2024-12-31",
+      "n_obs": 494
+    }
+  },
+  "config_snapshot": {
+    "data": {
+      "source": "yfinance",
+      "asset_a": "TCS.NS",
+      "asset_b": "INFY.NS",
+      "candidate_pairs": [
+        [
+          "HDFCBANK.NS",
+          "ICICIBANK.NS"
+        ],
+        [
+          "TCS.NS",
+          "INFY.NS"
+        ],
+        [
+          "KO",
+          "PEP"
+        ]
+      ],
+      "start_date": "2015-01-01",
+      "end_date": "2024-12-31",
+      "prefer_adjusted": true,
+      "cache_dir": "data/raw",
+      "min_observations": 252,
+      "max_gap_days": 7,
+      "extreme_return_threshold": 0.25
+    },
+    "splits": {
+      "train": 0.6,
+      "validation": 0.2,
+      "test": 0.2
+    },
+    "cointegration": {
+      "significance": 0.05,
+      "trend": "c",
+      "autolag": "AIC",
+      "min_observations": 100
+    },
+    "hedge_ratio": {
+      "method": "ols_log_price"
+    },
+    "spread": {
+      "min_std": 1e-08
+    },
+    "strategy": {
+      "entry_z": 2.0,
+      "exit_z": 0.5,
+      "stop_loss_z": null,
+      "max_holding_days": null,
+      "execution_lag": 1
+    },
+    "portfolio": {
+      "initial_capital": 1000000.0,
+      "max_gross_exposure": 1.0,
+      "rebalance_tolerance": 0.1,
+      "close_at_period_end": true
+    },
+    "costs": {
+      "commission_bps": 5.0,
+      "slippage_bps": 5.0,
+      "borrow_bps_annual": 50.0,
+      "short_selling_allowed": true
+    },
+    "metrics": {
+      "periods_per_year": 252,
+      "risk_free_rate": 0.0,
+      "min_years_for_cagr": 1.0
+    },
+    "evaluation": {
+      "test_parameter_source": "config",
+      "selection_metric": "sharpe",
+      "min_trades_for_selection": 3
+    },
+    "walk_forward": {
+      "train_window": 504,
+      "test_window": 126,
+      "expanding": false,
+      "require_cointegration": true,
+      "min_eval_observations": 20
+    },
+    "robustness": {
+      "entry_grid": [
+        1.5,
+        2.0,
+        2.5,
+        3.0
+      ],
+      "exit_grid": [
+        0.0,
+        0.25,
+        0.5,
+        1.0
+      ],
+      "cost_grid_bps": [
+        0.0,
+        5.0,
+        10.0,
+        20.0,
+        40.0
+      ]
+    },
+    "synthetic": {
+      "n_observations": 2520,
+      "hedge_ratio": 0.8,
+      "intercept": 0.4,
+      "half_life": 15.0,
+      "residual_volatility": 0.012,
+      "seed": 42
+    },
+    "reproducibility": {
+      "random_seed": 42,
+      "reports_dir": "reports"
+    },
+    "ml": {
+      "enabled": true,
+      "horizon": 5,
+      "tolerance_z": 0.25,
+      "min_abs_z": 1.0,
+      "embargo": 0,
+      "z_lags": [
+        1,
+        2,
+        5
+      ],
+      "momentum_window": 10,
+      "volatility_window": 20,
+      "correlation_window": 20,
+      "return_windows": [
+        1,
+        5
+      ],
+      "probability_threshold": 0.5,
+      "threshold_source": "config",
+      "threshold_grid": [
+        0.5,
+        0.55,
+        0.6,
+        0.65,
+        0.7
+      ],
+      "tuning_metric": "roc_auc",
+      "logistic_c_grid": [
+        0.01,
+        0.1,
+        1.0,
+        10.0
+      ],
+      "rf_n_estimators": 200,
+      "rf_max_depth_grid": [
+        3,
+        6
+      ],
+      "rf_min_samples_leaf_grid": [
+        10,
+        30
+      ],
+      "min_train_samples": 60,
+      "min_class_count": 10,
+      "min_eval_samples": 30,
+      "calibration_bins": 5
+    }
+  },
+  "environment": {
+    "python": "3.13.7",
+    "platform": "Windows-11-10.0.26300-SP0",
+    "numpy": "2.5.4",
+    "pandas": "3.0.6",
+    "scipy": "1.18.1",
+    "statsmodels": "0.15.0",
+    "yfinance": "1.7.0",
+    "plotly": "7.1.0",
+    "streamlit": "1.66.0"
+  },
+  "training_estimates": {
+    "intercept": 0.505867979349512,
+    "hedge_ratio": 1.0727388451131579,
+    "r_squared": 0.8942594448291398,
+    "eg_statistic": -3.1242660653114203,
+    "eg_p_value": 0.08353223494140949,
+    "eg_decision": "Fail to reject H0 of no cointegration at the 5% level (p = 0.0835).",
+    "half_life_bars": 48.2666983176509
+  },
+  "warnings": {
+    "statistical": [
+      "The pair does not pass the training-period cointegration test at the chosen significance level."
+    ],
+    "ml": []
+  },
+  "ml_models": {
+    "logistic_regression": {
+      "status": "fitted",
+      "selected_params": {
+        "C": 10.0
+      },
+      "thresholds": {
+        "ml_only": 0.5,
+        "hybrid": 0.5
+      },
+      "train_rows": 560,
+      "train_class_counts": {
+        "0": 414,
+        "1": 146
+      },
+      "train_rows_first": "2015-02-10",
+      "train_rows_last": "2020-12-23"
+    },
+    "random_forest": {
+      "status": "fitted",
+      "selected_params": {
+        "max_depth": 3,
+        "min_samples_leaf": 10
+      },
+      "thresholds": {
+        "ml_only": 0.5,
+        "hybrid": 0.5
+      },
+      "train_rows": 560,
+      "train_class_counts": {
+        "0": 414,
+        "1": 146
+      },
+      "train_rows_first": "2015-02-10",
+      "train_rows_last": "2020-12-23"
+    }
+  },
+  "ml_samples": {
+    "train": {
+      "start": "2015-01-01",
+      "end": "2020-12-31",
+      "bars": 1480,
+      "eligible_bars": 565,
+      "rows_used": 560,
+      "excluded_label_crosses_boundary_or_missing": 5,
+      "positive_rows": 146,
+      "negative_rows": 414,
+      "positive_rate": 0.2607142857142857,
+      "first_row": "2015-02-10",
+      "last_row": "2020-12-23"
+    },
+    "validation": {
+      "start": "2021-01-01",
+      "end": "2022-12-27",
+      "bars": 493,
+      "eligible_bars": 491,
+      "rows_used": 486,
+      "excluded_label_crosses_boundary_or_missing": 5,
+      "positive_rows": 76,
+      "negative_rows": 410,
+      "positive_rate": 0.1563786008230452,
+      "first_row": "2021-01-01",
+      "last_row": "2022-12-20"
+    },
+    "test": {
+      "start": "2022-12-28",
+      "end": "2024-12-31",
+      "bars": 494,
+      "eligible_bars": 405,
+      "rows_used": 400,
+      "excluded_label_crosses_boundary_or_missing": 5,
+      "positive_rows": 56,
+      "negative_rows": 344,
+      "positive_rate": 0.14,
+      "first_row": "2022-12-28",
+      "last_row": "2024-12-23"
+    }
+  },
+  "classification": {
+    "LR | train": {
+      "n_samples": 560.0,
+      "positive_rate": 0.26071428571428573,
+      "majority_class_accuracy": 0.7392857142857143,
+      "accuracy": 0.6178571428571429,
+      "precision": 0.373134328358209,
+      "recall": 0.684931506849315,
+      "f1": 0.4830917874396135,
+      "roc_auc": 0.6670471841704717,
+      "brier_score": 0.22760593466771195,
+      "log_loss": 0.646548223219476
+    },
+    "LR | validation": {
+      "n_samples": 486.0,
+      "positive_rate": 0.15637860082304528,
+      "majority_class_accuracy": 0.8436213991769548,
+      "accuracy": 0.2757201646090535,
+      "precision": 0.1650485436893204,
+      "recall": 0.8947368421052632,
+      "f1": 0.2786885245901639,
+      "roc_auc": 0.4976412066752246,
+      "brier_score": 0.697013007575081,
+      "log_loss": 8.392129821031256
+    },
+    "LR | test": {
+      "n_samples": 400.0,
+      "positive_rate": 0.14,
+      "majority_class_accuracy": 0.86,
+      "accuracy": 0.5875,
+      "precision": 0.192090395480226,
+      "recall": 0.6071428571428571,
+      "f1": 0.2918454935622318,
+      "roc_auc": 0.5636939368770764,
+      "brier_score": 0.414022720136548,
+      "log_loss": 3.5386773972172048
+    },
+    "RF | train": {
+      "n_samples": 560.0,
+      "positive_rate": 0.26071428571428573,
+      "majority_class_accuracy": 0.7392857142857143,
+      "accuracy": 0.7535714285714286,
+      "precision": 0.5217391304347826,
+      "recall": 0.6575342465753424,
+      "f1": 0.5818181818181818,
+      "roc_auc": 0.819386539606909,
+      "brier_score": 0.19741387432866983,
+      "log_loss": 0.5844410164401427
+    },
+    "RF | validation": {
+      "n_samples": 486.0,
+      "positive_rate": 0.15637860082304528,
+      "majority_class_accuracy": 0.8436213991769548,
+      "accuracy": 0.3888888888888889,
+      "precision": 0.15789473684210525,
+      "recall": 0.6710526315789473,
+      "f1": 0.2556390977443609,
+      "roc_auc": 0.47618741976893453,
+      "brier_score": 0.2664201367483526,
+      "log_loss": 0.7258908687257989
+    },
+    "RF | test": {
+      "n_samples": 400.0,
+      "positive_rate": 0.14,
+      "majority_class_accuracy": 0.86,
+      "accuracy": 0.5875,
+      "precision": 0.15286624203821655,
+      "recall": 0.42857142857142855,
+      "f1": 0.22535211267605634,
+      "roc_auc": 0.5331706810631229,
+      "brier_score": 0.2361683995902355,
+      "log_loss": 0.6649510070686037
+    }
+  },
+  "strategy_comparison": {
+    "train": {
+      "A. Traditional (z-score)": {
+        "cumulative_return": 0.1837112319687495,
+        "gross_cumulative_return": 0.193341465511128,
+        "cagr": 0.0291331714983515,
+        "annualized_volatility": 0.048717960153937,
+        "sharpe_ratio": 0.6137853773497725,
+        "max_drawdown": -0.0505592282484596,
+        "completed_trades": 3.0,
+        "pct_time_invested": 0.1385135135135135,
+        "total_turnover": 6.061395140018425,
+        "total_transaction_costs": 6732.663229135564,
+        "total_borrow_costs": 2159.5204256071024
+      },
+      "B. ML-only (LR)": {
+        "cumulative_return": 0.7409934933908064,
+        "gross_cumulative_return": 0.8974750851791062,
+        "cagr": 0.0990073463177407,
+        "annualized_volatility": 0.0676367002501136,
+        "sharpe_ratio": 1.4296499882725398,
+        "max_drawdown": -0.047213426198976,
+        "completed_trades": 41.0,
+        "pct_time_invested": 0.2702702702702703,
+        "total_turnover": 82.14036660622753,
+        "total_transaction_costs": 109904.65382226463,
+        "total_borrow_costs": 5285.1944603203765
+      },
+      "C. Hybrid (LR)": {
+        "cumulative_return": 0.1837112319687495,
+        "gross_cumulative_return": 0.193341465511128,
+        "cagr": 0.0291331714983515,
+        "annualized_volatility": 0.048717960153937,
+        "sharpe_ratio": 0.6137853773497725,
+        "max_drawdown": -0.0505592282484596,
+        "completed_trades": 3.0,
+        "pct_time_invested": 0.1385135135135135,
+        "total_turnover": 6.061395140018425,
+        "total_transaction_costs": 6732.663229135564,
+        "total_borrow_costs": 2159.5204256071024
+      },
+      "B. ML-only (RF)": {
+        "cumulative_return": 0.6364348265647624,
+        "gross_cumulative_return": 0.7712563064060334,
+        "cagr": 0.087478280347778,
+        "annualized_volatility": 0.0618522313241331,
+        "sharpe_ratio": 1.386808102902421,
+        "max_drawdown": -0.0553991570136884,
+        "completed_trades": 38.0,
+        "pct_time_invested": 0.2101351351351351,
+        "total_turnover": 76.09845912462185,
+        "total_transaction_costs": 97047.21835507768,
+        "total_borrow_costs": 3795.4297083502074
+      },
+      "C. Hybrid (RF)": {
+        "cumulative_return": 0.1837112319687495,
+        "gross_cumulative_return": 0.193341465511128,
+        "cagr": 0.0291331714983515,
+        "annualized_volatility": 0.048717960153937,
+        "sharpe_ratio": 0.6137853773497725,
+        "max_drawdown": -0.0505592282484596,
+        "completed_trades": 3.0,
+        "pct_time_invested": 0.1385135135135135,
+        "total_turnover": 6.061395140018425,
+        "total_transaction_costs": 6732.663229135564,
+        "total_borrow_costs": 2159.5204256071024
+      }
+    },
+    "validation": {
+      "A. Traditional (z-score)": {
+        "cumulative_return": -0.0757985824465963,
+        "gross_cumulative_return": -0.0694444980344737,
+        "cagr": -0.0394910824403205,
+        "annualized_volatility": 0.0869198731891759,
+        "sharpe_ratio": -0.4201655757790375,
+        "max_drawdown": -0.1464740289741923,
+        "completed_trades": 1.0,
+        "pct_time_invested": 0.9797160243407708,
+        "total_turnover": 2.189728528367968,
+        "total_transaction_costs": 2098.9573036462534,
+        "total_borrow_costs": 4370.917339864821
+      },
+      "B. ML-only (LR)": {
+        "cumulative_return": -0.0753240781196306,
+        "gross_cumulative_return": -0.0582588023402298,
+        "cagr": -0.0392390397655608,
+        "annualized_volatility": 0.0770554729715636,
+        "sharpe_ratio": -0.4809566320859809,
+        "max_drawdown": -0.1183364040839289,
+        "completed_trades": 7.0,
+        "pct_time_invested": 0.8884381338742393,
+        "total_turnover": 14.208680077382844,
+        "total_transaction_costs": 13930.952850637725,
+        "total_borrow_costs": 3801.249985314494
+      },
+      "C. Hybrid (LR)": {
+        "cumulative_return": -0.0433766084525442,
+        "gross_cumulative_return": -0.0371934175078791,
+        "cagr": -0.0224124972392955,
+        "annualized_volatility": 0.0838070355967505,
+        "sharpe_ratio": -0.2286609065461022,
+        "max_drawdown": -0.1166538135918563,
+        "completed_trades": 1.0,
+        "pct_time_invested": 0.9006085192697769,
+        "total_turnover": 2.1812724063983926,
+        "total_transaction_costs": 2128.9160186888184,
+        "total_borrow_costs": 4106.187875132354
+      },
+      "B. ML-only (RF)": {
+        "cumulative_return": -0.060219973151858,
+        "gross_cumulative_return": -0.0256484912417011,
+        "cagr": -0.0312489622674584,
+        "annualized_volatility": 0.0813279216714812,
+        "sharpe_ratio": -0.3497629165570981,
+        "max_drawdown": -0.1320112033844865,
+        "completed_trades": 16.0,
+        "pct_time_invested": 0.7586206896551724,
+        "total_turnover": 32.23914448516072,
+        "total_transaction_costs": 31467.253014745773,
+        "total_borrow_costs": 3742.996160534293
+      },
+      "C. Hybrid (RF)": {
+        "cumulative_return": -0.0433766084525442,
+        "gross_cumulative_return": -0.0371934175078791,
+        "cagr": -0.0224124972392955,
+        "annualized_volatility": 0.0838070355967505,
+        "sharpe_ratio": -0.2286609065461022,
+        "max_drawdown": -0.1166538135918563,
+        "completed_trades": 1.0,
+        "pct_time_invested": 0.9006085192697769,
+        "total_turnover": 2.1812724063983926,
+        "total_transaction_costs": 2128.9160186888184,
+        "total_borrow_costs": 4106.187875132354
+      }
+    },
+    "test": {
+      "A. Traditional (z-score)": {
+        "cumulative_return": 0.0690122082296604,
+        "gross_cumulative_return": 0.0777441129078346,
+        "cagr": 0.0346290763024847,
+        "annualized_volatility": 0.0778485607335544,
+        "sharpe_ratio": 0.4760189923343706,
+        "max_drawdown": -0.0755943053491358,
+        "completed_trades": 2.0,
+        "pct_time_invested": 0.8522267206477733,
+        "total_turnover": 4.059132610258567,
+        "total_transaction_costs": 4366.617763291928,
+        "total_borrow_costs": 4363.5734186932095
+      },
+      "B. ML-only (LR)": {
+        "cumulative_return": 0.0683605941054352,
+        "gross_cumulative_return": 0.0900389984524048,
+        "cagr": 0.034307317118732,
+        "annualized_volatility": 0.0604485693787393,
+        "sharpe_ratio": 0.5880763734967988,
+        "max_drawdown": -0.0728187226714764,
+        "completed_trades": 9.0,
+        "pct_time_invested": 0.4149797570850202,
+        "total_turnover": 18.008353126488863,
+        "total_transaction_costs": 19701.92213212943,
+        "total_borrow_costs": 2213.860834092844
+      },
+      "C. Hybrid (LR)": {
+        "cumulative_return": 0.0675028311841325,
+        "gross_cumulative_return": 0.0762168684711182,
+        "cagr": 0.0338836175427521,
+        "annualized_volatility": 0.0779071239142489,
+        "sharpe_ratio": 0.4664662521803,
+        "max_drawdown": -0.0756900737063167,
+        "completed_trades": 2.0,
+        "pct_time_invested": 0.8502024291497976,
+        "total_turnover": 4.061177988392443,
+        "total_transaction_costs": 4367.242603813647,
+        "total_borrow_costs": 4353.786147992754
+      },
+      "B. ML-only (RF)": {
+        "cumulative_return": -0.0200812785359361,
+        "gross_cumulative_return": 0.0120275295721266,
+        "cagr": -0.0102947865080205,
+        "annualized_volatility": 0.051568228829359,
+        "sharpe_ratio": -0.1749964079403546,
+        "max_drawdown": -0.0793919056126167,
+        "completed_trades": 15.0,
+        "pct_time_invested": 0.4230769230769231,
+        "total_turnover": 30.055460857490356,
+        "total_transaction_costs": 30233.839289376745,
+        "total_borrow_costs": 2183.5925470907405
+      },
+      "C. Hybrid (RF)": {
+        "cumulative_return": 0.0675028311841325,
+        "gross_cumulative_return": 0.0762168684711182,
+        "cagr": 0.0338836175427521,
+        "annualized_volatility": 0.0779071239142489,
+        "sharpe_ratio": 0.4664662521803,
+        "max_drawdown": -0.0756900737063167,
+        "completed_trades": 2.0,
+        "pct_time_invested": 0.8502024291497976,
+        "total_turnover": 4.061177988392443,
+        "total_transaction_costs": 4367.242603813647,
+        "total_borrow_costs": 4353.786147992754
+      }
+    },
+    "walk_forward": {
+      "A. Traditional (z-score)": {
+        "cumulative_return": 0.2153206560569132,
+        "gross_cumulative_return": 0.2442622638248641,
+        "cagr": 0.025350119215894,
+        "annualized_volatility": 0.0600845576017492,
+        "sharpe_ratio": 0.4464701626701889,
+        "max_drawdown": -0.1498770727665861,
+        "completed_trades": 10.0,
+        "pct_time_invested": 0.1390728476821192,
+        "total_turnover": 20.070157271173898,
+        "total_transaction_costs": 21130.390266950708,
+        "total_borrow_costs": 3548.4995008295336
+      },
+      "B. ML-only (LR)": {
+        "cumulative_return": 0.3305328795950573,
+        "gross_cumulative_return": 0.4047170247114942,
+        "cagr": 0.0373415650993422,
+        "annualized_volatility": 0.0656939061714671,
+        "sharpe_ratio": 0.5906926865404452,
+        "max_drawdown": -0.1710864499261885,
+        "completed_trades": 25.0,
+        "pct_time_invested": 0.1823739174732552,
+        "total_turnover": 49.89934074883723,
+        "total_transaction_costs": 57254.56296460715,
+        "total_borrow_costs": 4484.873425677017
+      },
+      "C. Hybrid (LR)": {
+        "cumulative_return": 0.2429266846150548,
+        "gross_cumulative_return": 0.2722263767834891,
+        "cagr": 0.0283108935762879,
+        "annualized_volatility": 0.0592801356745528,
+        "sharpe_ratio": 0.5003678669169401,
+        "max_drawdown": -0.1498770727665861,
+        "completed_trades": 10.0,
+        "pct_time_invested": 0.1314314824248599,
+        "total_turnover": 19.99490289441477,
+        "total_transaction_costs": 21172.46066678537,
+        "total_borrow_costs": 3399.471330022218
+      },
+      "B. ML-only (RF)": {
+        "cumulative_return": 0.2544268013864128,
+        "gross_cumulative_return": 0.3224036438901134,
+        "cagr": 0.029527406530553,
+        "annualized_volatility": 0.0681159938534308,
+        "sharpe_ratio": 0.4609865165271388,
+        "max_drawdown": -0.1676628434831923,
+        "completed_trades": 24.0,
+        "pct_time_invested": 0.1920529801324503,
+        "total_turnover": 48.13656188741797,
+        "total_transaction_costs": 53911.81124282652,
+        "total_borrow_costs": 4747.612427782755
+      },
+      "C. Hybrid (RF)": {
+        "cumulative_return": 0.2218423353702727,
+        "gross_cumulative_return": 0.2506742127778099,
+        "cagr": 0.0260548244927083,
+        "annualized_volatility": 0.0590256058982054,
+        "sharpe_ratio": 0.4650606734261145,
+        "max_drawdown": -0.1498770727665861,
+        "completed_trades": 10.0,
+        "pct_time_invested": 0.1319409067753438,
+        "total_turnover": 20.012970055751914,
+        "total_transaction_costs": 21069.136175592543,
+        "total_borrow_costs": 3391.286613482404
+      }
+    }
+  },
+  "walk_forward_windows": [
+    {
+      "window": 1,
+      "fit_start": "2015-01-01",
+      "fit_end": "2017-01-17",
+      "eval_start": "2017-01-18",
+      "eval_end": "2017-07-21",
+      "cointegrated": false,
+      "traded": false
+    },
+    {
+      "window": 2,
+      "fit_start": "2015-07-07",
+      "fit_end": "2017-07-21",
+      "eval_start": "2017-07-24",
+      "eval_end": "2018-01-22",
+      "cointegrated": true,
+      "traded": true
+    },
+    {
+      "window": 3,
+      "fit_start": "2016-01-11",
+      "fit_end": "2018-01-22",
+      "eval_start": "2018-01-23",
+      "eval_end": "2018-07-25",
+      "cointegrated": false,
+      "traded": false
+    },
+    {
+      "window": 4,
+      "fit_start": "2016-07-15",
+      "fit_end": "2018-07-25",
+      "eval_start": "2018-07-26",
+      "eval_end": "2019-01-30",
+      "cointegrated": false,
+      "traded": false
+    },
+    {
+      "window": 5,
+      "fit_start": "2017-01-18",
+      "fit_end": "2019-01-30",
+      "eval_start": "2019-01-31",
+      "eval_end": "2019-08-07",
+      "cointegrated": true,
+      "traded": true
+    },
+    {
+      "window": 6,
+      "fit_start": "2017-07-24",
+      "fit_end": "2019-08-07",
+      "eval_start": "2019-08-08",
+      "eval_end": "2020-02-12",
+      "cointegrated": true,
+      "traded": true
+    },
+    {
+      "window": 7,
+      "fit_start": "2018-01-23",
+      "fit_end": "2020-02-12",
+      "eval_start": "2020-02-13",
+      "eval_end": "2020-08-18",
+      "cointegrated": true,
+      "traded": true
+    },
+    {
+      "window": 8,
+      "fit_start": "2018-07-26",
+      "fit_end": "2020-08-18",
+      "eval_start": "2020-08-19",
+      "eval_end": "2021-02-16",
+      "cointegrated": true,
+      "traded": true
+    },
+    {
+      "window": 9,
+      "fit_start": "2019-01-31",
+      "fit_end": "2021-02-16",
+      "eval_start": "2021-02-17",
+      "eval_end": "2021-08-23",
+      "cointegrated": true,
+      "traded": true
+    },
+    {
+      "window": 10,
+      "fit_start": "2019-08-08",
+      "fit_end": "2021-08-23",
+      "eval_start": "2021-08-24",
+      "eval_end": "2022-02-22",
+      "cointegrated": true,
+      "traded": true
+    },
+    {
+      "window": 11,
+      "fit_start": "2020-02-13",
+      "fit_end": "2022-02-22",
+      "eval_start": "2022-02-23",
+      "eval_end": "2022-08-26",
+      "cointegrated": true,
+      "traded": true
+    },
+    {
+      "window": 12,
+      "fit_start": "2020-08-19",
+      "fit_end": "2022-08-26",
+      "eval_start": "2022-08-29",
+      "eval_end": "2023-02-27",
+      "cointegrated": true,
+      "traded": true
+    },
+    {
+      "window": 13,
+      "fit_start": "2021-02-17",
+      "fit_end": "2023-02-27",
+      "eval_start": "2023-02-28",
+      "eval_end": "2023-09-01",
+      "cointegrated": false,
+      "traded": false
+    },
+    {
+      "window": 14,
+      "fit_start": "2021-08-24",
+      "fit_end": "2023-09-01",
+      "eval_start": "2023-09-04",
+      "eval_end": "2024-03-07",
+      "cointegrated": false,
+      "traded": false
+    },
+    {
+      "window": 15,
+      "fit_start": "2022-02-23",
+      "fit_end": "2024-03-07",
+      "eval_start": "2024-03-11",
+      "eval_end": "2024-09-13",
+      "cointegrated": false,
+      "traded": false
+    },
+    {
+      "window": 16,
+      "fit_start": "2022-08-29",
+      "fit_end": "2024-09-13",
+      "eval_start": "2024-09-16",
+      "eval_end": "2024-12-31",
+      "cointegrated": false,
+      "traded": false
+    }
+  ]
+}

@@ -1,0 +1,81 @@
+{
+  "per_strategy": {
+    "ml_only_logistic_regression": {
+      "gate_a_development_classification": false,
+      "development_roc_auc": 0.5227941176470587,
+      "development_brier_skill": -0.10900455972362,
+      "gate_b_holdout_sharpe_difference": false,
+      "holdout_sharpe_difference": {
+        "point": -0.2514140127700414,
+        "lower": -1.409704498726928,
+        "upper": 0.981981820976922,
+        "confidence": 0.9875,
+        "samples": 4971,
+        "share_positive": 0.30054315027157513
+      },
+      "gate_c_beats_A_at_20bps": false,
+      "decision": "reject"
+    },
+    "hybrid_logistic_regression": {
+      "gate_a_development_classification": false,
+      "development_roc_auc": 0.5227941176470587,
+      "development_brier_skill": -0.10900455972362,
+      "gate_b_holdout_sharpe_difference": false,
+      "holdout_sharpe_difference": {
+        "point": 0.0,
+        "lower": 0.0,
+        "upper": 0.0,
+        "confidence": 0.9875,
+        "samples": 4971,
+        "share_positive": 0.0
+      },
+      "gate_c_beats_A_at_20bps": false,
+      "decision": "reject"
+    },
+    "ml_only_random_forest": {
+      "gate_a_development_classification": false,
+      "development_roc_auc": 0.5153301886792453,
+      "development_brier_skill": -0.015739916779378582,
+      "gate_b_holdout_sharpe_difference": false,
+      "holdout_sharpe_difference": {
+        "point": -0.14961406385261167,
+        "lower": -1.310485947905023,
+        "upper": 1.0798797121756845,
+        "confidence": 0.9875,
+        "samples": 4971,
+        "share_positive": 0.38141219070609533
+      },
+      "gate_c_beats_A_at_20bps": false,
+      "decision": "reject"
+    },
+    "hybrid_random_forest": {
+      "gate_a_development_classification": false,
+      "development_roc_auc": 0.5153301886792453,
+      "development_brier_skill": -0.015739916779378582,
+      "gate_b_holdout_sharpe_difference": false,
+      "holdout_sharpe_difference": {
+        "point": 0.0,
+        "lower": 0.0,
+        "upper": 0.0,
+        "confidence": 0.9875,
+        "samples": 4971,
+        "share_positive": 0.0
+      },
+      "gate_c_beats_A_at_20bps": false,
+      "decision": "reject"
+    },
+    "traditional": {
+      "holdout_sharpe": {
+        "point": -0.383326460407843,
+        "lower": -1.1765999269690421,
+        "upper": 0.5281895934270443,
+        "confidence": 0.95,
+        "samples": 4971,
+        "share_positive": 0.171997585998793
+      },
+      "development_sharpe_point": 0.32742737194817123,
+      "decision": "reject"
+    }
+  },
+  "overall": "reject the tested hypothesis"
+}

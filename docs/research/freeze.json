@@ -1,0 +1,9 @@
+{
+  "frozen_at": "2026-10-21T16:28:03+00:00",
+  "code_fingerprint": "b395a4988bf7abf4c9742f8e6c4f859f0671cd2f3042c8cffed89e975dab4202",
+  "config_sha256": "28016b5e61276f9f83b846521272b9e284169224d7d3e0ee1c9bd9d37b1969b1",
+  "preregistration_sha256": "cc16cc78c388bfc15d046ec5aee0df137b58dae3d742ff54da8a4682f7cda9ec",
+  "config_path": "config/research_v2.yaml",
+  "development_run": "reports/experiments/20261021T162712Z_development",
+  "development_summary_sha256": "6b37956bd897ef69d28ad69f9f023e5292451727311e7a0d2dac9e6f16ba4df9"
+}

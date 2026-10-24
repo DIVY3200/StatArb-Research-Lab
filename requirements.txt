@@ -1,0 +1,22 @@
+# Core research stack (tested with the versions in requirements-lock.txt on Python 3.13)
+numpy>=2.0,<3
+pandas>=2.2,<4
+scipy>=1.13,<2
+statsmodels>=0.14.2,<0.16
+scikit-learn>=1.5,<2         # Logistic Regression and Random Forest reversion classifiers
+PyYAML>=6.0,<7
+
+# Optional live data source (the platform works offline without network access)
+yfinance>=0.2.50,<2
+
+# Visualisation and dashboard
+plotly>=5.22,<8
+streamlit>=1.36,<2
+
+# Testing
+pytest>=8.0,<10
+
+# Notebook support (optional; scripts/run_research.py is the notebook-free alternative)
+nbformat>=5.10,<6
+nbclient>=0.10,<1
+ipykernel>=6.29,<8

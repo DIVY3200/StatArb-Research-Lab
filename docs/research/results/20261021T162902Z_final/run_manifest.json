@@ -1,0 +1,302 @@
+{
+  "stage": "final",
+  "started_at": "2026-10-21T16:28:14+00:00",
+  "finished_at": "2026-10-21T16:29:02+00:00",
+  "code_fingerprint": "b395a4988bf7abf4c9742f8e6c4f859f0671cd2f3042c8cffed89e975dab4202",
+  "config_sha256": "28016b5e61276f9f83b846521272b9e284169224d7d3e0ee1c9bd9d37b1969b1",
+  "preregistration_sha256": "cc16cc78c388bfc15d046ec5aee0df137b58dae3d742ff54da8a4682f7cda9ec",
+  "config_path": "config/research_v2.yaml",
+  "data_end": "2026-09-30",
+  "first_evaluation_date": "2025-01-01",
+  "pairs": [
+    {
+      "pair": "KO/PEP",
+      "evaluation": [
+        "2025-01-02",
+        "2026-09-30"
+      ],
+      "inputs": [
+        {
+          "ticker": "KO",
+          "source": "yfinance",
+          "retrieved_at": "2026-10-21T16:28:16+00:00",
+          "sha256": "0e9009d66f731596a1010efb6317158cb51cd32d2db62312c8cd031170e6b4f1",
+          "is_synthetic": false,
+          "n_rows": 2953,
+          "first_date": "2015-01-02",
+          "last_date": "2026-09-30",
+          "columns": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Adj Close",
+            "Volume"
+          ],
+          "notes": [
+            "Downloaded from Yahoo Finance via yfinance (auto_adjust=False). 'Adj Close' is split- and dividend-adjusted by the provider; it is used as delivered (no further adjustment).",
+            "Free provider data may be revised, incomplete or removed; re-downloads can differ."
+          ]
+        },
+        {
+          "ticker": "PEP",
+          "source": "yfinance",
+          "retrieved_at": "2026-10-21T16:28:16+00:00",
+          "sha256": "277e1ac848b35e94c0cddef42dac90bb350d129e4a2b2f6aeec1e05009bd30d2",
+          "is_synthetic": false,
+          "n_rows": 2953,
+          "first_date": "2015-01-02",
+          "last_date": "2026-09-30",
+          "columns": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Adj Close",
+            "Volume"
+          ],
+          "notes": [
+            "Downloaded from Yahoo Finance via yfinance (auto_adjust=False). 'Adj Close' is split- and dividend-adjusted by the provider; it is used as delivered (no further adjustment).",
+            "Free provider data may be revised, incomplete or removed; re-downloads can differ."
+          ]
+        }
+      ],
+      "aligned_rows": 2953,
+      "special_sessions": [],
+      "special_sessions_dropped": 0,
+      "windows": 4,
+      "windows_traded": 0
+    },
+    {
+      "pair": "HDFCBANK.NS/ICICIBANK.NS",
+      "evaluation": [
+        "2025-01-01",
+        "2026-09-30"
+      ],
+      "inputs": [
+        {
+          "ticker": "HDFCBANK.NS",
+          "source": "yfinance",
+          "retrieved_at": "2026-10-21T16:28:18+00:00",
+          "sha256": "1d83e00f5f1d117b3093164b19b77cb1e81fb1305dcdc7bd05a2afd3e870a2b0",
+          "is_synthetic": false,
+          "n_rows": 2901,
+          "first_date": "2015-01-01",
+          "last_date": "2026-09-30",
+          "columns": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Adj Close",
+            "Volume"
+          ],
+          "notes": [
+            "Downloaded from Yahoo Finance via yfinance (auto_adjust=False). 'Adj Close' is split- and dividend-adjusted by the provider; it is used as delivered (no further adjustment).",
+            "Free provider data may be revised, incomplete or removed; re-downloads can differ."
+          ]
+        },
+        {
+          "ticker": "ICICIBANK.NS",
+          "source": "yfinance",
+          "retrieved_at": "2026-10-21T16:28:18+00:00",
+          "sha256": "f3a119a13de9c003b5548ca30d8675fe4c9cd69b900917b6836e296f9e1b20b0",
+          "is_synthetic": false,
+          "n_rows": 2901,
+          "first_date": "2015-01-01",
+          "last_date": "2026-09-30",
+          "columns": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Adj Close",
+            "Volume"
+          ],
+          "notes": [
+            "Downloaded from Yahoo Finance via yfinance (auto_adjust=False). 'Adj Close' is split- and dividend-adjusted by the provider; it is used as delivered (no further adjustment).",
+            "Free provider data may be revised, incomplete or removed; re-downloads can differ."
+          ]
+        }
+      ],
+      "aligned_rows": 2889,
+      "special_sessions": [
+        {
+          "date": "2017-07-10",
+          "reasons": "leg B volume < 10% of trailing median"
+        },
+        {
+          "date": "2017-10-19",
+          "reasons": "listed special session"
+        },
+        {
+          "date": "2018-11-07",
+          "reasons": "listed special session; leg A volume < 10% of trailing median; leg B volume < 10% of trailing median"
+        },
+        {
+          "date": "2019-10-27",
+          "reasons": "weekend-dated bar; listed special session"
+        },
+        {
+          "date": "2020-11-14",
+          "reasons": "weekend-dated bar; listed special session; leg A volume < 10% of trailing median"
+        },
+        {
+          "date": "2021-11-04",
+          "reasons": "listed special session; leg A volume < 10% of trailing median"
+        },
+        {
+          "date": "2022-10-24",
+          "reasons": "listed special session"
+        },
+        {
+          "date": "2024-11-01",
+          "reasons": "listed special session; leg A volume < 10% of trailing median; leg B volume < 10% of trailing median"
+        },
+        {
+          "date": "2025-02-01",
+          "reasons": "weekend-dated bar"
+        },
+        {
+          "date": "2025-03-18",
+          "reasons": "leg A volume < 10% of trailing median; leg B volume < 10% of trailing median"
+        },
+        {
+          "date": "2025-10-21",
+          "reasons": "listed special session"
+        },
+        {
+          "date": "2026-01-15",
+          "reasons": "leg A volume < 10% of trailing median; leg B volume < 10% of trailing median"
+        }
+      ],
+      "special_sessions_dropped": 12,
+      "windows": 4,
+      "windows_traded": 1
+    },
+    {
+      "pair": "TCS.NS/INFY.NS",
+      "evaluation": [
+        "2025-01-01",
+        "2026-09-30"
+      ],
+      "inputs": [
+        {
+          "ticker": "TCS.NS",
+          "source": "yfinance",
+          "retrieved_at": "2026-10-21T16:28:23+00:00",
+          "sha256": "60ab42ba5a3e9b13005a78e35b96ed4102710d5b1698659c7d0149b957891362",
+          "is_synthetic": false,
+          "n_rows": 2901,
+          "first_date": "2015-01-01",
+          "last_date": "2026-09-30",
+          "columns": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Adj Close",
+            "Volume"
+          ],
+          "notes": [
+            "Downloaded from Yahoo Finance via yfinance (auto_adjust=False). 'Adj Close' is split- and dividend-adjusted by the provider; it is used as delivered (no further adjustment).",
+            "Free provider data may be revised, incomplete or removed; re-downloads can differ."
+          ]
+        },
+        {
+          "ticker": "INFY.NS",
+          "source": "yfinance",
+          "retrieved_at": "2026-10-21T16:28:23+00:00",
+          "sha256": "1ae9a26a1ee1f39306cc2c985358b6a0ee3475f427b1407a8f454c6bfe061729",
+          "is_synthetic": false,
+          "n_rows": 2901,
+          "first_date": "2015-01-01",
+          "last_date": "2026-09-30",
+          "columns": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Adj Close",
+            "Volume"
+          ],
+          "notes": [
+            "Downloaded from Yahoo Finance via yfinance (auto_adjust=False). 'Adj Close' is split- and dividend-adjusted by the provider; it is used as delivered (no further adjustment).",
+            "Free provider data may be revised, incomplete or removed; re-downloads can differ."
+          ]
+        }
+      ],
+      "aligned_rows": 2890,
+      "special_sessions": [
+        {
+          "date": "2017-10-19",
+          "reasons": "listed special session; leg A volume < 10% of trailing median"
+        },
+        {
+          "date": "2018-11-07",
+          "reasons": "listed special session; leg A volume < 10% of trailing median"
+        },
+        {
+          "date": "2019-10-27",
+          "reasons": "weekend-dated bar; listed special session; leg A volume < 10% of trailing median"
+        },
+        {
+          "date": "2020-11-14",
+          "reasons": "weekend-dated bar; listed special session; leg A volume < 10% of trailing median"
+        },
+        {
+          "date": "2021-11-04",
+          "reasons": "listed special session; leg B volume < 10% of trailing median"
+        },
+        {
+          "date": "2022-10-24",
+          "reasons": "listed special session"
+        },
+        {
+          "date": "2024-11-01",
+          "reasons": "listed special session; leg A volume < 10% of trailing median; leg B volume < 10% of trailing median"
+        },
+        {
+          "date": "2025-02-01",
+          "reasons": "weekend-dated bar"
+        },
+        {
+          "date": "2025-03-18",
+          "reasons": "leg A volume < 10% of trailing median; leg B volume < 10% of trailing median"
+        },
+        {
+          "date": "2025-10-21",
+          "reasons": "listed special session"
+        },
+        {
+          "date": "2026-01-15",
+          "reasons": "leg A volume < 10% of trailing median; leg B volume < 10% of trailing median"
+        }
+      ],
+      "special_sessions_dropped": 11,
+      "windows": 4,
+      "windows_traded": 1
+    }
+  ],
+  "environment": {
+    "python": "3.13.7",
+    "platform": "Windows-11-10.0.26300-SP0",
+    "numpy": "2.5.4",
+    "pandas": "3.0.6",
+    "scipy": "1.18.1",
+    "statsmodels": "0.15.0",
+    "sklearn": "1.9.1",
+    "yfinance": "1.7.0"
+  },
+  "random_seed": 42,
+  "bootstrap_seed": 20261021,
+  "freeze": {
+    "frozen_at": "2026-10-21T16:28:03+00:00",
+    "code_fingerprint": "b395a4988bf7abf4c9742f8e6c4f859f0671cd2f3042c8cffed89e975dab4202",
+    "config_sha256": "28016b5e61276f9f83b846521272b9e284169224d7d3e0ee1c9bd9d37b1969b1",
+    "preregistration_sha256": "cc16cc78c388bfc15d046ec5aee0df137b58dae3d742ff54da8a4682f7cda9ec",
+    "config_path": "config/research_v2.yaml",
+    "development_run": "reports/experiments/20261021T162712Z_development",
+    "development_summary_sha256": "6b37956bd897ef69d28ad69f9f023e5292451727311e7a0d2dac9e6f16ba4df9"
+  }
+}

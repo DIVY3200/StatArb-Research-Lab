@@ -1,0 +1,890 @@
+{
+  "stage": "development",
+  "evaluation_dates": [
+    "2017-01-04",
+    "2024-12-31"
+  ],
+  "pooled_metrics": {
+    "A. Traditional (z-score)": {
+      "observations": 2063.0,
+      "cumulative_return": 0.06440945678762966,
+      "cagr": 0.0076539008353395666,
+      "annualized_volatility": 0.02414007127787872,
+      "sharpe_ratio": 0.32790314119695035,
+      "sortino_ratio": 0.4987105376611694,
+      "max_drawdown": -0.08407715016282291,
+      "calmar_ratio": 0.09103425628148794,
+      "gross_cumulative_return": 0.07393709819251448,
+      "completed_trades": 11.0,
+      "pct_time_invested_avg": 0.06561767233789577,
+      "avg_gross_exposure_avg": 0.06562396888392058,
+      "annualized_turnover_avg": 0.9516088630831847,
+      "total_costs_pct_of_capital_avg": 0.009379712011336036
+    },
+    "B. ML-only (LR)": {
+      "observations": 2063.0,
+      "cumulative_return": 0.15648644159196112,
+      "cagr": 0.01791791273738208,
+      "annualized_volatility": 0.0242263669882323,
+      "sharpe_ratio": 0.7451503137258746,
+      "sortino_ratio": 1.2677252649291895,
+      "max_drawdown": -0.05058949352448472,
+      "calmar_ratio": 0.35418248907176786,
+      "gross_cumulative_return": 0.18102088204522637,
+      "completed_trades": 29.0,
+      "pct_time_invested_avg": 0.0741375042059146,
+      "avg_gross_exposure_avg": 0.07387479662150527,
+      "annualized_turnover_avg": 2.4875710568681555,
+      "total_costs_pct_of_capital_avg": 0.024915818506721855
+    },
+    "C. Hybrid (LR)": {
+      "observations": 2063.0,
+      "cumulative_return": 0.08028089725161847,
+      "cagr": 0.009477355741215998,
+      "annualized_volatility": 0.023209844504451228,
+      "sharpe_ratio": 0.41799088001765755,
+      "sortino_ratio": 0.6583819946966499,
+      "max_drawdown": -0.07547769063100374,
+      "calmar_ratio": 0.12556499360253365,
+      "gross_cumulative_return": 0.08983854033291627,
+      "completed_trades": 11.0,
+      "pct_time_invested_avg": 0.062038417216268564,
+      "avg_gross_exposure_avg": 0.06180182972298661,
+      "annualized_turnover_avg": 0.9481015426695611,
+      "total_costs_pct_of_capital_avg": 0.009319783963951027
+    },
+    "B. ML-only (RF)": {
+      "observations": 2063.0,
+      "cumulative_return": 0.08836531216586718,
+      "cagr": 0.010397143378477525,
+      "annualized_volatility": 0.02374705477980264,
+      "sharpe_ratio": 0.44741154055121707,
+      "sortino_ratio": 0.7181032366230697,
+      "max_drawdown": -0.07557402548735637,
+      "calmar_ratio": 0.1375756195522095,
+      "gross_cumulative_return": 0.11895812867628108,
+      "completed_trades": 39.0,
+      "pct_time_invested_avg": 0.07294215276579201,
+      "avg_gross_exposure_avg": 0.07316145597486708,
+      "annualized_turnover_avg": 3.351286274059602,
+      "total_costs_pct_of_capital_avg": 0.0308688324895884
+    },
+    "C. Hybrid (RF)": {
+      "observations": 2063.0,
+      "cumulative_return": 0.07245612717866123,
+      "cagr": 0.008581335966724613,
+      "annualized_volatility": 0.022329898212522223,
+      "sharpe_ratio": 0.3937999828241298,
+      "sortino_ratio": 0.6157278647664058,
+      "max_drawdown": -0.08290605457804456,
+      "calmar_ratio": 0.10350674640591506,
+      "gross_cumulative_return": 0.0816466473211439,
+      "completed_trades": 11.0,
+      "pct_time_invested_avg": 0.053517277810030385,
+      "avg_gross_exposure_avg": 0.053438517156366216,
+      "annualized_turnover_avg": 0.9438515711907057,
+      "total_costs_pct_of_capital_avg": 0.009169968177865927
+    }
+  },
+  "per_pair_metrics": {
+    "KO/PEP": {
+      "A. Traditional (z-score)": {
+        "observations": 2006.0,
+        "cumulative_return": 0.0,
+        "cagr": 0.0,
+        "annualized_volatility": 0.0,
+        "sharpe_ratio": null,
+        "sortino_ratio": null,
+        "max_drawdown": 0.0,
+        "calmar_ratio": null,
+        "gross_cumulative_return": 0.0,
+        "completed_trades": 0.0,
+        "pct_time_invested_avg": 0.0,
+        "avg_gross_exposure_avg": 0.0,
+        "annualized_turnover_avg": 0.0,
+        "total_costs_pct_of_capital_avg": 0.0
+      },
+      "B. ML-only (LR)": {
+        "observations": 2006.0,
+        "cumulative_return": 0.0,
+        "cagr": 0.0,
+        "annualized_volatility": 0.0,
+        "sharpe_ratio": null,
+        "sortino_ratio": null,
+        "max_drawdown": 0.0,
+        "calmar_ratio": null,
+        "gross_cumulative_return": 0.0,
+        "completed_trades": 0.0,
+        "pct_time_invested_avg": 0.0,
+        "avg_gross_exposure_avg": 0.0,
+        "annualized_turnover_avg": 0.0,
+        "total_costs_pct_of_capital_avg": 0.0
+      },
+      "C. Hybrid (LR)": {
+        "observations": 2006.0,
+        "cumulative_return": 0.0,
+        "cagr": 0.0,
+        "annualized_volatility": 0.0,
+        "sharpe_ratio": null,
+        "sortino_ratio": null,
+        "max_drawdown": 0.0,
+        "calmar_ratio": null,
+        "gross_cumulative_return": 0.0,
+        "completed_trades": 0.0,
+        "pct_time_invested_avg": 0.0,
+        "avg_gross_exposure_avg": 0.0,
+        "annualized_turnover_avg": 0.0,
+        "total_costs_pct_of_capital_avg": 0.0
+      },
+      "B. ML-only (RF)": {
+        "observations": 2006.0,
+        "cumulative_return": 0.0,
+        "cagr": 0.0,
+        "annualized_volatility": 0.0,
+        "sharpe_ratio": null,
+        "sortino_ratio": null,
+        "max_drawdown": 0.0,
+        "calmar_ratio": null,
+        "gross_cumulative_return": 0.0,
+        "completed_trades": 0.0,
+        "pct_time_invested_avg": 0.0,
+        "avg_gross_exposure_avg": 0.0,
+        "annualized_turnover_avg": 0.0,
+        "total_costs_pct_of_capital_avg": 0.0
+      },
+      "C. Hybrid (RF)": {
+        "observations": 2006.0,
+        "cumulative_return": 0.0,
+        "cagr": 0.0,
+        "annualized_volatility": 0.0,
+        "sharpe_ratio": null,
+        "sortino_ratio": null,
+        "max_drawdown": 0.0,
+        "calmar_ratio": null,
+        "gross_cumulative_return": 0.0,
+        "completed_trades": 0.0,
+        "pct_time_invested_avg": 0.0,
+        "avg_gross_exposure_avg": 0.0,
+        "annualized_turnover_avg": 0.0,
+        "total_costs_pct_of_capital_avg": 0.0
+      }
+    },
+    "HDFCBANK.NS/ICICIBANK.NS": {
+      "A. Traditional (z-score)": {
+        "observations": 1955.0,
+        "cumulative_return": -0.057646413766595295,
+        "cagr": -0.0076242035052720425,
+        "annualized_volatility": 0.042769449728718247,
+        "sharpe_ratio": -0.15754395754842926,
+        "sortino_ratio": -0.21838842165760955,
+        "max_drawdown": -0.14183074359439396,
+        "calmar_ratio": -0.0537556478380714,
+        "gross_cumulative_return": -0.054823205017612064,
+        "completed_trades": 1.0,
+        "pct_time_invested_avg": 0.044501278772378514,
+        "avg_gross_exposure_avg": 0.04556710779035283,
+        "annualized_turnover_avg": 0.2820187884867339,
+        "total_costs_pct_of_capital_avg": 0.002897120436445675
+      },
+      "B. ML-only (LR)": {
+        "observations": 1955.0,
+        "cumulative_return": 0.07164420054694487,
+        "cagr": 0.008959031870254375,
+        "annualized_volatility": 0.035971229570106775,
+        "sharpe_ratio": 0.2658314896926184,
+        "sortino_ratio": 0.43704870080937763,
+        "max_drawdown": -0.09417438965793512,
+        "calmar_ratio": 0.09513235926238348,
+        "gross_cumulative_return": 0.08095757350225674,
+        "completed_trades": 4.0,
+        "pct_time_invested_avg": 0.03887468030690537,
+        "avg_gross_exposure_avg": 0.03884848716087996,
+        "annualized_turnover_avg": 1.026579586900519,
+        "total_costs_pct_of_capital_avg": 0.009097866762852192
+      },
+      "C. Hybrid (LR)": {
+        "observations": 1955.0,
+        "cumulative_return": -0.03013896679475525,
+        "cagr": -0.003936897836953279,
+        "annualized_volatility": 0.03870174325950191,
+        "sharpe_ratio": -0.08264746144347375,
+        "sortino_ratio": -0.12276396594981592,
+        "max_drawdown": -0.13872693674862024,
+        "calmar_ratio": -0.028378755627590364,
+        "gross_cumulative_return": -0.027325192818613786,
+        "completed_trades": 1.0,
+        "pct_time_invested_avg": 0.04143222506393862,
+        "avg_gross_exposure_avg": 0.04227523339533501,
+        "annualized_turnover_avg": 0.2779743488199535,
+        "total_costs_pct_of_capital_avg": 0.0028581315352952837
+      },
+      "B. ML-only (RF)": {
+        "observations": 1955.0,
+        "cumulative_return": -0.042615526658114855,
+        "cagr": -0.005597907451317385,
+        "annualized_volatility": 0.028569672154440128,
+        "sharpe_ratio": -0.1822450420778795,
+        "sortino_ratio": -0.25633640000494323,
+        "max_drawdown": -0.11385711960579736,
+        "calmar_ratio": -0.04916607297548701,
+        "gross_cumulative_return": -0.028649609878969362,
+        "completed_trades": 7.0,
+        "pct_time_invested_avg": 0.024552429667519183,
+        "avg_gross_exposure_avg": 0.02479834706274358,
+        "annualized_turnover_avg": 1.8086817741598324,
+        "total_costs_pct_of_capital_avg": 0.014212727431804744
+      },
+      "C. Hybrid (RF)": {
+        "observations": 1955.0,
+        "cumulative_return": -0.06096469474487287,
+        "cagr": -0.008075327823696798,
+        "annualized_volatility": 0.037031472844953166,
+        "sharpe_ratio": -0.20048978593425476,
+        "sortino_ratio": -0.28900815411176034,
+        "max_drawdown": -0.13779617845251935,
+        "calmar_ratio": -0.05860342365357634,
+        "gross_cumulative_return": -0.05828609012333463,
+        "completed_trades": 1.0,
+        "pct_time_invested_avg": 0.03938618925831202,
+        "avg_gross_exposure_avg": 0.039872388429325605,
+        "annualized_turnover_avg": 0.27577289572258706,
+        "total_costs_pct_of_capital_avg": 0.0027518729545939783
+      }
+    },
+    "TCS.NS/INFY.NS": {
+      "A. Traditional (z-score)": {
+        "observations": 1956.0,
+        "cumulative_return": 0.261643965062494,
+        "cagr": 0.030395917923718763,
+        "annualized_volatility": 0.0608409221647646,
+        "sharpe_ratio": 0.5223535638919238,
+        "sortino_ratio": 0.8375188816422439,
+        "max_drawdown": -0.148057805140838,
+        "calmar_ratio": 0.2052976396266651,
+        "gross_cumulative_return": 0.2919368254878365,
+        "completed_trades": 10.0,
+        "pct_time_invested_avg": 0.1523517382413088,
+        "avg_gross_exposure_avg": 0.1513047988614089,
+        "annualized_turnover_avg": 2.57280780076282,
+        "total_costs_pct_of_capital_avg": 0.025242015597562433
+      },
+      "B. ML-only (LR)": {
+        "observations": 1956.0,
+        "cumulative_return": 0.4229123117577491,
+        "cagr": 0.04648885287002846,
+        "annualized_volatility": 0.06542955794656569,
+        "sharpe_ratio": 0.7269195722356436,
+        "sortino_ratio": 1.2506148934621564,
+        "max_drawdown": -0.157146900995203,
+        "calmar_ratio": 0.29583054184089547,
+        "gross_cumulative_return": 0.5023199525206163,
+        "completed_trades": 25.0,
+        "pct_time_invested_avg": 0.18353783231083845,
+        "avg_gross_exposure_avg": 0.18277590270363586,
+        "annualized_turnover_avg": 6.436133583703947,
+        "total_costs_pct_of_capital_avg": 0.06564958875731336
+      },
+      "C. Hybrid (LR)": {
+        "observations": 1956.0,
+        "cumulative_return": 0.2829331270417632,
+        "cagr": 0.03261967385381581,
+        "annualized_volatility": 0.06012912501787777,
+        "sharpe_ratio": 0.5636801369289088,
+        "sortino_ratio": 0.9115360918603944,
+        "max_drawdown": -0.148057805140838,
+        "calmar_ratio": 0.2203171512828168,
+        "gross_cumulative_return": 0.31345055688857815,
+        "completed_trades": 10.0,
+        "pct_time_invested_avg": 0.14468302658486706,
+        "avg_gross_exposure_avg": 0.14313025577362481,
+        "annualized_turnover_avg": 2.56633027918873,
+        "total_costs_pct_of_capital_avg": 0.025101220356557794
+      },
+      "B. ML-only (RF)": {
+        "observations": 1956.0,
+        "cumulative_return": 0.32826897562300705,
+        "cagr": 0.03725007791088708,
+        "annualized_volatility": 0.06734565011139051,
+        "sharpe_ratio": 0.576455396139154,
+        "sortino_ratio": 0.951246038966306,
+        "max_drawdown": -0.1720175529299467,
+        "calmar_ratio": 0.21654812126095638,
+        "gross_cumulative_return": 0.4226462523370238,
+        "completed_trades": 32.0,
+        "pct_time_invested_avg": 0.19427402862985685,
+        "avg_gross_exposure_avg": 0.19468602086185763,
+        "annualized_turnover_avg": 8.245177048018974,
+        "total_costs_pct_of_capital_avg": 0.07839377003696046
+      },
+      "C. Hybrid (RF)": {
+        "observations": 1956.0,
+        "cumulative_return": 0.29772271226657177,
+        "cagr": 0.0341456700140641,
+        "annualized_volatility": 0.05796868403869957,
+        "sharpe_ratio": 0.6079883441535913,
+        "sortino_ratio": 0.9864725318144171,
+        "max_drawdown": -0.1394470259209153,
+        "calmar_ratio": 0.24486481363488644,
+        "gross_cumulative_return": 0.32756697801372336,
+        "completed_trades": 10.0,
+        "pct_time_invested_avg": 0.12116564417177914,
+        "avg_gross_exposure_avg": 0.12044316303977305,
+        "annualized_turnover_avg": 2.55578181784953,
+        "total_costs_pct_of_capital_avg": 0.0247580315790038
+      }
+    }
+  },
+  "bootstrap": {
+    "sharpe": {
+      "traditional": {
+        "point": 0.32790314119695035,
+        "lower": -0.40637419533587776,
+        "upper": 1.0360149217859265,
+        "confidence": 0.95,
+        "samples": 5000,
+        "share_positive": 0.817
+      },
+      "ml_only_logistic_regression": {
+        "point": 0.7451503137258746,
+        "lower": 0.054616603870840365,
+        "upper": 1.3394526286319002,
+        "confidence": 0.95,
+        "samples": 5000,
+        "share_positive": 0.9826
+      },
+      "hybrid_logistic_regression": {
+        "point": 0.41799088001765755,
+        "lower": -0.3202813217376493,
+        "upper": 1.132820554850112,
+        "confidence": 0.95,
+        "samples": 5000,
+        "share_positive": 0.8676
+      },
+      "ml_only_random_forest": {
+        "point": 0.44741154055121707,
+        "lower": -0.2924902877074038,
+        "upper": 1.0947526162761902,
+        "confidence": 0.95,
+        "samples": 5000,
+        "share_positive": 0.8858
+      },
+      "hybrid_random_forest": {
+        "point": 0.3937999828241298,
+        "lower": -0.3804720771369958,
+        "upper": 1.146401901037688,
+        "confidence": 0.95,
+        "samples": 5000,
+        "share_positive": 0.8478
+      }
+    },
+    "difference_vs_traditional": {
+      "ml_only_logistic_regression": {
+        "ci": {
+          "point": 0.41724717252892424,
+          "lower": 0.008110262006910037,
+          "upper": 0.8518313053918847,
+          "confidence": 0.95,
+          "samples": 5000,
+          "share_positive": 0.9772
+        },
+        "ci_bonferroni": {
+          "point": 0.41724717252892424,
+          "lower": -0.0953089144745804,
+          "upper": 0.9731470862981023,
+          "confidence": 0.9875,
+          "samples": 5000,
+          "share_positive": 0.9772
+        }
+      },
+      "hybrid_logistic_regression": {
+        "ci": {
+          "point": 0.0900877388207072,
+          "lower": -0.031101146969771277,
+          "upper": 0.2530764894007026,
+          "confidence": 0.95,
+          "samples": 5000,
+          "share_positive": 0.9124
+        },
+        "ci_bonferroni": {
+          "point": 0.0900877388207072,
+          "lower": -0.05647037051691985,
+          "upper": 0.31960234728402065,
+          "confidence": 0.9875,
+          "samples": 5000,
+          "share_positive": 0.9124
+        }
+      },
+      "ml_only_random_forest": {
+        "ci": {
+          "point": 0.11950839935426671,
+          "lower": -0.24560230522024643,
+          "upper": 0.49644373497119154,
+          "confidence": 0.95,
+          "samples": 5000,
+          "share_positive": 0.7174
+        },
+        "ci_bonferroni": {
+          "point": 0.11950839935426671,
+          "lower": -0.3251181368533802,
+          "upper": 0.6072122893709142,
+          "confidence": 0.9875,
+          "samples": 5000,
+          "share_positive": 0.7174
+        }
+      },
+      "hybrid_random_forest": {
+        "ci": {
+          "point": 0.06589684162717946,
+          "lower": -0.10852297029531441,
+          "upper": 0.2790007480526274,
+          "confidence": 0.95,
+          "samples": 5000,
+          "share_positive": 0.7472
+        },
+        "ci_bonferroni": {
+          "point": 0.06589684162717946,
+          "lower": -0.15743617497758527,
+          "upper": 0.36418906615434943,
+          "confidence": 0.9875,
+          "samples": 5000,
+          "share_positive": 0.7472
+        }
+      }
+    },
+    "bonferroni_confidence": 0.9875
+  },
+  "classification": {
+    "logistic_regression": {
+      "n_rows": 552,
+      "positive_rate": 0.38405797101449274,
+      "mean_predicted": 0.5736301377409314,
+      "mean_reference": 0.5223383003504961,
+      "effective_sample_size": 163.990951220113,
+      "roc_auc": 0.5227941176470587,
+      "brier": 0.29044457886574115,
+      "brier_reference": 0.26189664985518557,
+      "brier_skill_score": -0.10900455972362,
+      "log_loss": 0.8211742240381428,
+      "log_loss_reference": 0.7171908037445553,
+      "log_loss_skill": -0.14498710768553535,
+      "calibration": [
+        {
+          "mean_predicted": 0.4011627464467756,
+          "observed_frequency": 0.34234234234234234,
+          "count": 111
+        },
+        {
+          "mean_predicted": 0.49970779533102894,
+          "observed_frequency": 0.37272727272727274,
+          "count": 110
+        },
+        {
+          "mean_predicted": 0.5472248198332814,
+          "observed_frequency": 0.42727272727272725,
+          "count": 110
+        },
+        {
+          "mean_predicted": 0.6113925129921085,
+          "observed_frequency": 0.37272727272727274,
+          "count": 110
+        },
+        {
+          "mean_predicted": 0.8080991628846483,
+          "observed_frequency": 0.40540540540540543,
+          "count": 111
+        }
+      ],
+      "per_window": [
+        {
+          "pair": "HDFCBANK.NS/ICICIBANK.NS",
+          "window": 3,
+          "rows": 96,
+          "roc_auc": 0.5646945646945647,
+          "positive_rate": 0.34375
+        },
+        {
+          "pair": "TCS.NS/INFY.NS",
+          "window": 2,
+          "rows": 121,
+          "roc_auc": 0.6738980716253443,
+          "positive_rate": 0.2727272727272727
+        },
+        {
+          "pair": "TCS.NS/INFY.NS",
+          "window": 5,
+          "rows": 49,
+          "roc_auc": 0.7993311036789297,
+          "positive_rate": 0.46938775510204084
+        },
+        {
+          "pair": "TCS.NS/INFY.NS",
+          "window": 6,
+          "rows": 60,
+          "roc_auc": 0.48709315375982043,
+          "positive_rate": 0.55
+        },
+        {
+          "pair": "TCS.NS/INFY.NS",
+          "window": 7,
+          "rows": 27,
+          "roc_auc": 0.42142857142857143,
+          "positive_rate": 0.25925925925925924
+        },
+        {
+          "pair": "TCS.NS/INFY.NS",
+          "window": 8,
+          "rows": 64,
+          "roc_auc": 0.6784090909090909,
+          "positive_rate": 0.3125
+        },
+        {
+          "pair": "TCS.NS/INFY.NS",
+          "window": 9,
+          "rows": 24,
+          "roc_auc": 0.53125,
+          "positive_rate": 0.3333333333333333
+        },
+        {
+          "pair": "TCS.NS/INFY.NS",
+          "window": 10,
+          "rows": 43,
+          "roc_auc": 0.550438596491228,
+          "positive_rate": 0.4418604651162791
+        },
+        {
+          "pair": "TCS.NS/INFY.NS",
+          "window": 11,
+          "rows": 29,
+          "roc_auc": 0.5297619047619048,
+          "positive_rate": 0.7241379310344828
+        },
+        {
+          "pair": "TCS.NS/INFY.NS",
+          "window": 12,
+          "rows": 39,
+          "roc_auc": 0.625,
+          "positive_rate": 0.38461538461538464
+        }
+      ]
+    },
+    "random_forest": {
+      "n_rows": 552,
+      "positive_rate": 0.38405797101449274,
+      "mean_predicted": 0.5304901052335298,
+      "mean_reference": 0.5223383003504961,
+      "effective_sample_size": 163.990951220113,
+      "roc_auc": 0.5153301886792453,
+      "brier": 0.2660188813287042,
+      "brier_reference": 0.26189664985518557,
+      "brier_skill_score": -0.015739916779378582,
+      "log_loss": 0.7278315110695994,
+      "log_loss_reference": 0.7171908037445553,
+      "log_loss_skill": -0.014836647750483545,
+      "calibration": [
+        {
+          "mean_predicted": 0.39615307414532575,
+          "observed_frequency": 0.4144144144144144,
+          "count": 111
+        },
+        {
+          "mean_predicted": 0.4753056845569939,
+          "observed_frequency": 0.37272727272727274,
+          "count": 110
+        },
+        {
+          "mean_predicted": 0.5329031246373762,
+          "observed_frequency": 0.3090909090909091,
+          "count": 110
+        },
+        {
+          "mean_predicted": 0.582372908933929,
+          "observed_frequency": 0.34545454545454546,
+          "count": 110
+        },
+        {
+          "mean_predicted": 0.6657077285104899,
+          "observed_frequency": 0.4774774774774775,
+          "count": 111
+        }
+      ],
+      "per_window": [
+        {
+          "pair": "HDFCBANK.NS/ICICIBANK.NS",
+          "window": 3,
+          "rows": 96,
+          "roc_auc": 0.442039442039442,
+          "positive_rate": 0.34375
+        },
+        {
+          "pair": "TCS.NS/INFY.NS",
+          "window": 2,
+          "rows": 121,
+          "roc_auc": 0.6198347107438017,
+          "positive_rate": 0.2727272727272727
+        },
+        {
+          "pair": "TCS.NS/INFY.NS",
+          "window": 5,
+          "rows": 49,
+          "roc_auc": 0.7274247491638796,
+          "positive_rate": 0.46938775510204084
+        },
+        {
+          "pair": "TCS.NS/INFY.NS",
+          "window": 6,
+          "rows": 60,
+          "roc_auc": 0.35129068462401797,
+          "positive_rate": 0.55
+        },
+        {
+          "pair": "TCS.NS/INFY.NS",
+          "window": 7,
+          "rows": 27,
+          "roc_auc": 0.7071428571428571,
+          "positive_rate": 0.25925925925925924
+        },
+        {
+          "pair": "TCS.NS/INFY.NS",
+          "window": 8,
+          "rows": 64,
+          "roc_auc": 0.5613636363636364,
+          "positive_rate": 0.3125
+        },
+        {
+          "pair": "TCS.NS/INFY.NS",
+          "window": 9,
+          "rows": 24,
+          "roc_auc": 0.375,
+          "positive_rate": 0.3333333333333333
+        },
+        {
+          "pair": "TCS.NS/INFY.NS",
+          "window": 10,
+          "rows": 43,
+          "roc_auc": 0.7258771929824562,
+          "positive_rate": 0.4418604651162791
+        },
+        {
+          "pair": "TCS.NS/INFY.NS",
+          "window": 11,
+          "rows": 29,
+          "roc_auc": 0.4523809523809524,
+          "positive_rate": 0.7241379310344828
+        },
+        {
+          "pair": "TCS.NS/INFY.NS",
+          "window": 12,
+          "rows": 39,
+          "roc_auc": 0.5361111111111111,
+          "positive_rate": 0.38461538461538464
+        }
+      ]
+    }
+  },
+  "cost_sensitivity": [
+    {
+      "cost_bps_per_leg_per_side": 0.0,
+      "variant": "A. Traditional (z-score)",
+      "cumulative_return": 0.0723109107939992,
+      "sharpe_ratio": 0.36517676618656025
+    },
+    {
+      "cost_bps_per_leg_per_side": 0.0,
+      "variant": "B. ML-only (LR)",
+      "cumulative_return": 0.1790529801961609,
+      "sharpe_ratio": 0.8423517209114856
+    },
+    {
+      "cost_bps_per_leg_per_side": 0.0,
+      "variant": "C. Hybrid (LR)",
+      "cumulative_return": 0.08827255542133172,
+      "sharpe_ratio": 0.4565153348106396
+    },
+    {
+      "cost_bps_per_leg_per_side": 0.0,
+      "variant": "B. ML-only (RF)",
+      "cumulative_return": 0.11707358168206938,
+      "sharpe_ratio": 0.5806986686537872
+    },
+    {
+      "cost_bps_per_leg_per_side": 0.0,
+      "variant": "C. Hybrid (RF)",
+      "cumulative_return": 0.08035166087932932,
+      "sharpe_ratio": 0.43373114952113695
+    },
+    {
+      "cost_bps_per_leg_per_side": 10.0,
+      "variant": "A. Traditional (z-score)",
+      "cumulative_return": 0.06440945678762966,
+      "sharpe_ratio": 0.32790314119695035
+    },
+    {
+      "cost_bps_per_leg_per_side": 10.0,
+      "variant": "B. ML-only (LR)",
+      "cumulative_return": 0.15648644159196112,
+      "sharpe_ratio": 0.7451503137258746
+    },
+    {
+      "cost_bps_per_leg_per_side": 10.0,
+      "variant": "C. Hybrid (LR)",
+      "cumulative_return": 0.08028089725161847,
+      "sharpe_ratio": 0.41799088001765755
+    },
+    {
+      "cost_bps_per_leg_per_side": 10.0,
+      "variant": "B. ML-only (RF)",
+      "cumulative_return": 0.08836531216586718,
+      "sharpe_ratio": 0.44741154055121707
+    },
+    {
+      "cost_bps_per_leg_per_side": 10.0,
+      "variant": "C. Hybrid (RF)",
+      "cumulative_return": 0.07245612717866123,
+      "sharpe_ratio": 0.3937999828241298
+    },
+    {
+      "cost_bps_per_leg_per_side": 20.0,
+      "variant": "A. Traditional (z-score)",
+      "cumulative_return": 0.05657102319400842,
+      "sharpe_ratio": 0.2904879753903501
+    },
+    {
+      "cost_bps_per_leg_per_side": 20.0,
+      "variant": "B. ML-only (LR)",
+      "cumulative_return": 0.13436619758953405,
+      "sharpe_ratio": 0.6471518040140662
+    },
+    {
+      "cost_bps_per_leg_per_side": 20.0,
+      "variant": "C. Hybrid (LR)",
+      "cumulative_return": 0.07235283581078011,
+      "sharpe_ratio": 0.3792537044408732
+    },
+    {
+      "cost_bps_per_leg_per_side": 20.0,
+      "variant": "B. ML-only (RF)",
+      "cumulative_return": 0.0604131059530677,
+      "sharpe_ratio": 0.31338165816843566
+    },
+    {
+      "cost_bps_per_leg_per_side": 20.0,
+      "variant": "C. Hybrid (RF)",
+      "cumulative_return": 0.06462320283899636,
+      "sharpe_ratio": 0.3536679871006271
+    },
+    {
+      "cost_bps_per_leg_per_side": 40.0,
+      "variant": "A. Traditional (z-score)",
+      "cumulative_return": 0.04108101109143858,
+      "sharpe_ratio": 0.2154556684730285
+    },
+    {
+      "cost_bps_per_leg_per_side": 40.0,
+      "variant": "B. ML-only (LR)",
+      "cumulative_return": 0.09142822735638023,
+      "sharpe_ratio": 0.45030015806118245
+    },
+    {
+      "cost_bps_per_leg_per_side": 40.0,
+      "variant": "C. Hybrid (LR)",
+      "cumulative_return": 0.05668527995804151,
+      "sharpe_ratio": 0.30138987184942223
+    },
+    {
+      "cost_bps_per_leg_per_side": 40.0,
+      "variant": "B. ML-only (RF)",
+      "cumulative_return": 0.006695737040389282,
+      "sharpe_ratio": 0.04599937834223805
+    },
+    {
+      "cost_bps_per_leg_per_side": 40.0,
+      "variant": "C. Hybrid (RF)",
+      "cumulative_return": 0.04914299942431577,
+      "sharpe_ratio": 0.27307701595876943
+    }
+  ],
+  "calendar_years": {
+    "A. Traditional (z-score)": {
+      "2017": -0.010423038584496447,
+      "2018": -0.0474973894751165,
+      "2019": 0.08470882655436607,
+      "2020": 0.017842856416786068,
+      "2021": 0.02281965929124241,
+      "2022": 0.0,
+      "2023": 0.0,
+      "2024": 0.0
+    },
+    "B. ML-only (LR)": {
+      "2017": -0.005696440712328887,
+      "2018": -0.005991535244819546,
+      "2019": 0.08318774509461102,
+      "2020": 0.035617083572388575,
+      "2021": 0.014793613891052493,
+      "2022": 0.02789984215330832,
+      "2023": 0.0,
+      "2024": 0.0
+    },
+    "C. Hybrid (LR)": {
+      "2017": -0.010423038584496447,
+      "2018": -0.03860085881281472,
+      "2019": 0.08228985600309024,
+      "2020": 0.025748134956931512,
+      "2021": 0.022819659291240857,
+      "2022": 0.0,
+      "2023": 0.0,
+      "2024": 0.0
+    },
+    "B. ML-only (RF)": {
+      "2017": -0.023248614093556275,
+      "2018": -0.04189380496942052,
+      "2019": 0.08439739450311601,
+      "2020": 0.02986961280070588,
+      "2021": 0.011407934638169026,
+      "2022": 0.029443416813054624,
+      "2023": 0.0001783757437394673,
+      "2024": 0.0
+    },
+    "C. Hybrid (RF)": {
+      "2017": -0.0010559514958374816,
+      "2018": -0.05117788445110594,
+      "2019": 0.08313067837256338,
+      "2020": 0.021347777951536973,
+      "2021": 0.022819659291242633,
+      "2022": 0.0,
+      "2023": 0.0,
+      "2024": 0.0
+    }
+  },
+  "volatility_regimes": {
+    "A. Traditional (z-score)": {
+      "low": -0.49056225116896673,
+      "mid": 1.0324734021004691,
+      "high": 0.5413367573206467
+    },
+    "B. ML-only (LR)": {
+      "low": -0.4528514321155126,
+      "mid": 1.095797160157754,
+      "high": 1.4341693710119194
+    },
+    "C. Hybrid (LR)": {
+      "low": -0.4905622511689674,
+      "mid": 1.0505868472172581,
+      "high": 0.7543432283649809
+    },
+    "B. ML-only (RF)": {
+      "low": -0.6184835934085119,
+      "mid": 1.2562975114523902,
+      "high": 0.8747182189358393
+    },
+    "C. Hybrid (RF)": {
+      "low": -0.43156327855793275,
+      "mid": 1.109754292506752,
+      "high": 0.5869949306887589
+    },
+    "days": {
+      "low": 688.0,
+      "mid": 687.0,
+      "high": 688.0
+    }
+  }
+}
