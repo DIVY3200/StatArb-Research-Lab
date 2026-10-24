@@ -212,3 +212,24 @@ enabled together in `config/research_v2.yaml`. Results: `docs/research/RESEARCH_
 New defect found during development and fixed before the freeze: listed NSE session dates were applied to the US
 pair (amendment A1; `::test_exchange_specific_session_dates_only_affect_that_exchange`). A second edge case was
 caught by a new test: `pooled_classification` returned NaN-filled output for a model with no predictions.
+
+## 7. Resolution status update (2026-10-25, engine options for the remaining items)
+
+The items left open in §6 are now implemented as **opt-in** options. The defaults are unchanged, so the default
+config still reproduces the baseline exactly (`tests/test_baseline_preserved.py`). `config/research_v2.yaml` also
+reproduces the frozen v2 development run exactly: every number in its `summary.json` and every common column of its
+CSV tables, re-run on 2026-10-24. The new options are evaluated in the separately pre-registered v3 study
+(`docs/research/v3/`), never on the spent v2 holdout.
+
+| ID | Status | Option | Where | Regression tests (`tests/`) |
+|---|---|---|---|---|
+| M2 | **Addressed**: the static workflow can hold periods flat when the training fit fails the gate | `evaluation.static_require_cointegration` | `evaluation.run_pair_research`, `static_tradable`; ML comparisons follow A | `test_research_options.py::test_static_gate_holds_periods_flat`, `::test_static_ml_follows_the_refit_and_the_gate` |
+| M4 | **Addressed**: a half-life time stop in static and walk-forward runs (per window); a test-period refit on train + validation | `strategy.max_holding_half_lives`, `evaluation.static_refit_before_test` | `evaluation.rules_for_model`, `run_pair_research`; ML test refit in `ml_evaluation` | `::test_rules_for_model_half_life_cap`, `::test_static_half_life_stop_caps_every_trade`, `::test_walk_forward_half_life_stop_is_per_window`, `::test_static_refit_before_test` |
+| M5 | **Addressed**: point-in-time ML training rows (block-wise parameters from earlier bars only). On v3 development data the models still show no skill (ROC-AUC 0.50) | `ml.training_features: point_in_time`, `ml.pit_estimation_window`, `ml.pit_block` | `ml_features.point_in_time_rows`, `ml_evaluation` | `::test_point_in_time_rows_use_only_earlier_data`, `::test_point_in_time_training_in_static_ml`, `::test_point_in_time_walk_forward` |
+| M10 | **Addressed**: NSE statutory costs (STT, exchange, SEBI, stamp, GST, brokerage, DP), single-stock-futures shorts (no borrow fee, rolls, margin reporting, optional lot rounding), per-market overrides | `costs.profile: nse`, `costs.short_instrument: futures`, `markets:` | `portfolio.MarketCostModel`, `backtester`, `config.ResearchConfig.for_pair` | `test_realism.py::test_nse_rates_by_hand`, `::test_futures_short_round_trip_costs_by_hand`, `::test_futures_rolls_charged_on_schedule`, `::test_futures_lot_sizes_round_both_legs_and_block_small_positions`, `test_research_options.py::test_market_overrides_reach_the_backtests` |
+| M11 | **Addressed**: next-open execution with adjusted opens and a reported close fallback | `strategy.execution_price: open` | `data_validation.adjusted_open`, `backtester` | `test_realism.py::test_open_fill_earns_only_after_the_fill`, `test_research_options.py::test_next_open_execution_end_to_end` |
+| M13 | **Addressed**: Engle-Granger in both directions and Johansen in the engine, recorded per window, with selectable gates. The Johansen trace test is oversized with weakly drifting prices (11–12% at 5%, `scripts/johansen_size_study.py`), so v3 requires EG **and** Johansen | `cointegration.gate`, `cointegration.record_all_tests` | `cointegration.johansen_test`, `cointegration_suite` | `test_cointegration_suite.py`, `test_research_options.py::test_walk_forward_gate_variants` |
+| M14 | **Addressed**: cash interest on idle capital, short proceeds and futures carry; constant or calendar-year risk-free rates per market; Sharpe on excess returns | `portfolio.cash_interest`, `metrics.risk_free_by_year` | `backtester`, `metrics.period_excess_returns`, `experiment.risk_free_daily` | `test_realism.py::test_schedule_config_and_cash_interest_by_year`, `::test_flat_chained_walk_forward_has_zero_excess_return` |
+
+Still open: M8 (period-end liquidation stays part of the protocol). Not modelled: futures basis, time-varying lot
+sizes, and a daily risk-free series from an official source; v3 uses approximate annual averages.

@@ -1,0 +1,246 @@
+data:
+  source: yfinance
+  asset_a: TCS.NS
+  asset_b: INFY.NS
+  candidate_pairs:
+  - - KO
+    - PEP
+  - - HDFCBANK.NS
+    - ICICIBANK.NS
+  - - TCS.NS
+    - INFY.NS
+  start_date: '2015-01-01'
+  end_date: '2026-09-30'
+  prefer_adjusted: true
+  cache_dir: data/raw
+  min_observations: 252
+  max_gap_days: 7
+  extreme_return_threshold: 0.25
+  special_sessions: drop
+  special_session_dates: []
+  special_session_dates_by_exchange:
+  - - NS
+    - - '2015-11-11'
+      - '2016-10-30'
+      - '2017-10-19'
+      - '2018-11-07'
+      - '2019-10-27'
+      - '2020-11-14'
+      - '2021-11-04'
+      - '2022-10-24'
+      - '2023-11-12'
+      - '2024-11-01'
+      - '2025-10-21'
+  special_session_volume_ratio: 0.1
+splits:
+  train: 0.6
+  validation: 0.2
+  test: 0.2
+cointegration:
+  significance: 0.05
+  trend: c
+  autolag: AIC
+  min_observations: 100
+  gate: eg_and_johansen
+  record_all_tests: true
+  johansen_det_order: 0
+  johansen_k_ar_diff: 1
+hedge_ratio:
+  method: ols_log_price
+spread:
+  min_std: 1.0e-08
+strategy:
+  entry_z: 2.0
+  exit_z: 0.5
+  stop_loss_z: null
+  max_holding_days: null
+  execution_lag: 1
+  max_holding_half_lives: 3.0
+  execution_price: open
+portfolio:
+  initial_capital: 1000000.0
+  max_gross_exposure: 1.0
+  rebalance_tolerance: 0.1
+  close_at_period_end: true
+  cash_interest: true
+costs:
+  commission_bps: 5.0
+  slippage_bps: 5.0
+  borrow_bps_annual: 50.0
+  short_selling_allowed: true
+  profile: generic
+  short_instrument: cash
+  stt_delivery_bps: 10.0
+  stt_futures_sell_bps: 2.0
+  exchange_cash_bps: 0.297
+  exchange_futures_bps: 0.173
+  sebi_fee_bps: 0.01
+  stamp_delivery_buy_bps: 1.5
+  stamp_futures_buy_bps: 0.2
+  gst_rate: 0.18
+  brokerage_bps: 0.0
+  brokerage_flat_cash: 0.0
+  brokerage_flat_futures: 0.0
+  dp_charge_cash_sell: 0.0
+  futures_roll_every_bars: 21
+  futures_roll_spread_bps: 2.0
+  futures_margin_rate: 0.2
+  futures_lot_sizes: []
+metrics:
+  periods_per_year: 252
+  risk_free_rate: 0.0
+  min_years_for_cagr: 1.0
+  risk_free_by_year:
+  - - 2015
+    - 0.0005
+  - - 2016
+    - 0.0032
+  - - 2017
+    - 0.0093
+  - - 2018
+    - 0.0194
+  - - 2019
+    - 0.0206
+  - - 2020
+    - 0.0037
+  - - 2021
+    - 0.0004
+  - - 2022
+    - 0.0202
+  - - 2023
+    - 0.0507
+  - - 2024
+    - 0.0497
+  - - 2025
+    - 0.042
+  - - 2026
+    - 0.037
+evaluation:
+  test_parameter_source: config
+  selection_metric: sharpe
+  min_trades_for_selection: 3
+  static_require_cointegration: true
+  static_refit_before_test: true
+walk_forward:
+  train_window: 504
+  test_window: 126
+  expanding: false
+  require_cointegration: true
+  min_eval_observations: 20
+robustness:
+  entry_grid:
+  - 1.5
+  - 2.0
+  - 2.5
+  - 3.0
+  exit_grid:
+  - 0.0
+  - 0.25
+  - 0.5
+  - 1.0
+  cost_grid_bps:
+  - 0.0
+  - 10.0
+  - 20.0
+  - 40.0
+synthetic:
+  n_observations: 2520
+  hedge_ratio: 0.8
+  intercept: 0.4
+  half_life: 15.0
+  residual_volatility: 0.012
+  seed: 42
+reproducibility:
+  random_seed: 42
+  reports_dir: reports
+ml:
+  enabled: true
+  horizon: 5
+  tolerance_z: 0.25
+  min_abs_z: 1.0
+  embargo: 0
+  z_lags:
+  - 1
+  - 2
+  - 5
+  momentum_window: 10
+  volatility_window: 20
+  correlation_window: 20
+  return_windows:
+  - 1
+  - 5
+  probability_threshold: 0.5
+  threshold_source: config
+  threshold_grid:
+  - 0.5
+  - 0.55
+  - 0.6
+  - 0.65
+  - 0.7
+  tuning_metric: log_loss
+  logistic_c_grid:
+  - 0.01
+  - 0.1
+  - 1.0
+  - 10.0
+  rf_n_estimators: 200
+  rf_max_depth_grid:
+  - 3
+  - 6
+  rf_min_samples_leaf_grid:
+  - 10
+  - 30
+  min_train_samples: 60
+  min_class_count: 10
+  min_eval_samples: 30
+  calibration_bins: 5
+  walk_forward_tuning: nested
+  inner_validation_fraction: 0.3
+  class_weight: none
+  threshold_mode: prevalence
+  prevalence_multiplier: 1.0
+  include_prevalence_baseline: true
+  training_features: point_in_time
+  pit_estimation_window: 252
+  pit_block: 21
+holdout:
+  enforce: true
+  development_end: '2026-09-30'
+  holdout_start: '2026-10-01'
+  holdout_end: '2028-09-30'
+  protocol_dir: docs/research/v3
+inference:
+  bootstrap_samples: 5000
+  mean_block_length: 20.0
+  confidence: 0.95
+  seed: 20261024
+markets:
+  NS:
+    costs:
+      profile: nse
+      short_instrument: futures
+      commission_bps: 0.0
+      slippage_bps: 5.0
+      borrow_bps_annual: 0.0
+      brokerage_bps: 0.0
+      brokerage_flat_cash: 0.0
+      brokerage_flat_futures: 20.0
+      dp_charge_cash_sell: 15.93
+      futures_roll_every_bars: 21
+      futures_roll_spread_bps: 2.0
+      futures_margin_rate: 0.2
+      futures_lot_sizes: {}
+    metrics:
+      risk_free_by_year:
+        2015: 0.076
+        2016: 0.067
+        2017: 0.062
+        2018: 0.066
+        2019: 0.059
+        2020: 0.038
+        2021: 0.034
+        2022: 0.05
+        2023: 0.068
+        2024: 0.067
+        2025: 0.057
+        2026: 0.054

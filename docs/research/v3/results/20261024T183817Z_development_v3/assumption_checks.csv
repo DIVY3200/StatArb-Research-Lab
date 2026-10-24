@@ -1,0 +1,19 @@
+scenario,variant,cumulative_return,sharpe_ratio,sharpe_basis
+as run,A. Traditional (z-score),0.5249964541420191,0.02299703436712508,excess
+as run,B. ML-only (LR),0.630137434830053,0.38536594539569535,excess
+as run,C. Hybrid (LR),0.5795952805616182,0.22022284779257797,excess
+as run,B. ML-only (RF),0.5704903698025332,0.1715464270886834,excess
+as run,C. Hybrid (RF),0.5767070866989765,0.2178648983709447,excess
+as run,"B0. B rules, prevalence forecast (no model)",0.5391007997320347,0.06240167247567819,excess
+cash interest off,A. Traditional (z-score),-0.0012967220325509343,0.0032909287751703804,net
+cash interest off,B. ML-only (LR),0.06601447893323797,0.3546510024844404,net
+cash interest off,C. Hybrid (LR),0.03445105204337273,0.1973622414161641,net
+cash interest off,B. ML-only (RF),0.02651525150347034,0.1415330231676729,net
+cash interest off,C. Hybrid (RF),0.03271758098284128,0.1949556417818216,net
+cash interest off,"B0. B rules, prevalence forecast (no model)",0.004062274115581577,0.02898903302572343,net
+v2 execution and costs,A. Traditional (z-score),0.002211013100365422,0.0210195572660629,net
+v2 execution and costs,B. ML-only (LR),0.09775931843870334,0.5225730325245624,net
+v2 execution and costs,C. Hybrid (LR),0.023194071805703098,0.1364678595514674,net
+v2 execution and costs,B. ML-only (RF),0.04808473707129046,0.24491700649662082,net
+v2 execution and costs,C. Hybrid (RF),0.03137395713669977,0.18739303096759885,net
+v2 execution and costs,"B0. B rules, prevalence forecast (no model)",0.025703540280559434,0.1217519796589366,net

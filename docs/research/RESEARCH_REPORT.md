@@ -193,3 +193,30 @@ Artifacts (written to `reports/experiments/`, committed as byte-identical copies
 development) and `20261021T162902Z_final` (holdout, `decision.json`).
 Each holds the config snapshot, input hashes, environment, seeds, per-pair windows, trades, predictions, and
 pooled tables. `docs/research/freeze.json` and `docs/research/holdout_evaluated.json` record the protocol state.
+
+## Addendum (2026-10-25): open items implemented; v3 study
+
+The open items listed in §7 are now implemented as opt-in engine options:
+
+* point-in-time ML training rows;
+* a half-life time stop, a static cointegration gate and a test-period refit;
+* NSE statutory costs with single-stock-futures shorts;
+* next-open execution;
+* Engle-Granger in both directions and Johansen in the engine;
+* cash interest at calendar-year risk-free rates, with Sharpe on excess returns.
+
+`docs/audit/PHASE1_AUDIT.md` §7 maps each one to its tests.
+
+**This report and its decision are unchanged.** The v2 holdout is spent. The new options were not evaluated on it,
+and the v2 specification does not use them. With the current code, `config/research_v2.yaml` reproduces the frozen
+development run exactly: every number in `summary.json` and every common CSV column were checked on 2026-10-24. The
+exact code that produced this report is tagged `v2-frozen-holdout`.
+
+The options are tested in a new, separately pre-registered study, v3 (`docs/research/v3/`), with a holdout from
+2026-10-01 to 2028-09-30. On development data (2017–2026), v3 again finds:
+
+* no ML skill: pooled ROC-AUC 0.50 for both models, with negative Brier skill;
+* a near-zero excess-return Sharpe for A (0.02).
+
+Under v3's rules, no ML candidate can therefore be retained whatever its holdout shows. See
+[`v3/DEVELOPMENT_REPORT.md`](v3/DEVELOPMENT_REPORT.md).

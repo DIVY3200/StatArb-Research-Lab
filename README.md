@@ -1,5 +1,8 @@
 # StatArb Research Lab
 
+[![tests](https://github.com/DIVY3200/StatArb-Research-Lab/actions/workflows/tests.yml/badge.svg)](https://github.com/DIVY3200/StatArb-Research-Lab/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A reproducible research platform for studying **cointegration-based pairs trading** on daily stock prices, with
 a **machine-learning layer** that tests whether reversion classifiers improve on the traditional rules. It
 includes a modular Python package (`statarb`), a Streamlit dashboard, a command-line research script, a notebook,
@@ -25,6 +28,17 @@ nothing it produces is financial advice.**
 > See [Audit and v2 research protocol](#audit-and-v2-research-protocol),
 > [`docs/research/RESEARCH_REPORT.md`](docs/research/RESEARCH_REPORT.md) and
 > [`docs/audit/PHASE1_AUDIT.md`](docs/audit/PHASE1_AUDIT.md).
+>
+> **Next study (v3, registered 2026-10-24).** v3 adds:
+> * next-open fills;
+> * NSE statutory costs with single-stock-futures shorts;
+> * cash interest at calendar-year T-bill rates;
+> * a half-life time stop and an Engle-Granger + Johansen gate;
+> * point-in-time ML training rows.
+>
+> Its holdout runs from 2026-10-01 to 2028-09-30. On development data the ML models again show no skill
+> (ROC-AUC 0.50), so under v3's rules no ML variant can be retained whatever the holdout shows. See
+> [v3 protocol](#v3-protocol-realism-and-robustness-upgrades).
 
 ---
 
@@ -36,20 +50,22 @@ nothing it produces is financial advice.**
 4. [Methodology](#methodology)
 5. [Machine-learning layer](#machine-learning-layer)
 6. [Audit and v2 research protocol](#audit-and-v2-research-protocol)
-7. [Dashboard](#dashboard)
-8. [Reproducibility](#reproducibility)
-9. [Testing](#testing)
-10. [Example results (KO/PEP, HDFCBANK/ICICIBANK, TCS/INFY)](#example-results)
-11. [Research integrity and limitations](#research-integrity-and-limitations)
-12. [Troubleshooting](#troubleshooting)
-13. [Future improvements](#future-improvements)
-14. [Resume summary](#resume-summary)
+7. [v3 protocol: realism and robustness upgrades](#v3-protocol-realism-and-robustness-upgrades)
+8. [Dashboard](#dashboard)
+9. [Reproducibility](#reproducibility)
+10. [Testing](#testing)
+11. [Example results (KO/PEP, HDFCBANK/ICICIBANK, TCS/INFY)](#example-results)
+12. [Research integrity and limitations](#research-integrity-and-limitations)
+13. [Troubleshooting](#troubleshooting)
+14. [Future improvements](#future-improvements)
+15. [Resume summary](#resume-summary)
 
 ---
 
 ## Quick start
 
-Requires Python 3.10+ (developed and tested on Python 3.13.7, Windows 11).
+Requires Python 3.10+. Developed on Python 3.13.7 (Windows 11). CI runs the full test suite on Linux, Windows and
+macOS with Python 3.10, 3.11, 3.12, 3.13 and 3.14 (`.github/workflows/tests.yml`).
 
 ```bash
 # 1. Create and activate a virtual environment
@@ -80,6 +96,11 @@ The ML comparison runs by default (`ml.enabled: true`) and adds about 5–10 s p
 # Audited v2 protocol (pre-registered; see docs/research/)
 python scripts/run_experiment.py --stage development   # 2015-2024 only; refuses later data
 # --freeze and --stage final have already been run once; the final stage now refuses to run again
+
+# v3 protocol (pre-registered; see docs/research/v3/)
+python scripts/run_experiment.py --config config/research_v3.yaml --stage development   # 2015-2026-09 only
+# --stage final refuses to run before the holdout ends (2028-09-30), without a freeze, or a second time
+python scripts/johansen_size_study.py                   # reproduces the Johansen size caveat (a few minutes)
 ```
 
 The dashboard opens on a **labelled synthetic dataset**, so it works offline. Switch the sidebar data source to
@@ -98,30 +119,36 @@ src/statarb/
   data_validation.py        Cleaning, validation reports, two-asset date alignment (no forward fill)
   diagnostics.py            Exploratory statistics (returns, rolling volatility/correlation, summaries)
   hedge_ratio.py            Training-window OLS hedge ratio on log prices
-  cointegration.py          Engle-Granger test, ADF integration checks, Benjamini-Hochberg correction
+  cointegration.py          Engle-Granger (both directions), Johansen, trading gates, ADF checks, BH correction
   spread.py                 Spread, training-normalised z-score, AR(1) half-life
   signals.py                Finite-state entry/exit/stop/max-holding signal machine
-  portfolio.py              Hedge ratio -> dollar leg weights; linear cost and borrow model
-  backtester.py             Two-leg, delayed-execution, cost-aware event backtester with trade log
-  metrics.py                Performance metrics, benchmarks and comparison tables (NaN when undefined)
+  portfolio.py              Hedge ratio -> dollar leg weights; generic and NSE cost schedules, lot rounding
+  backtester.py             Two-leg event backtester: close or next-open fills, costs, borrow, futures rolls and
+                            margin, cash interest, trade log
+  metrics.py                Metrics, benchmarks, comparison tables; constant or calendar-year risk-free rates
   evaluation.py             Chronological splits, research pipeline, parameter grid, walk-forward, snapshots
   universe.py               Training-only pair screen with false-discovery control
-  ml_features.py            Reversion target, causal features, eligibility and purged sample masks
+  ml_features.py            Reversion target, causal features, purged masks, point-in-time training rows
   ml_models.py              scikit-learn pipelines (LR, RF), guarded fitting, validation tuning, metrics, importance
   ml_strategy.py            Signal rules for B (ML-only) and C (hybrid)
   ml_evaluation.py          ML research run, A/B/C comparison, ML walk-forward (static or nested tuning), repricing
   inference.py              Stationary bootstrap (Sharpe and paired differences), effective sample size
-  experiment.py             Pre-registered v2 experiment: pooling across pairs, inference, decision rules
+  experiment.py             Pre-registered experiments: per-market settings, pooling, excess-return inference,
+                            decision rules, assumption checks
   protocol.py               Holdout guard and code fingerprints
   visualization.py          Plotly figures (colour-vision-deficiency-safe palette, single y-axis per panel)
 scripts/run_research.py     Notebook-free reproducible research run (statistical + ML layers)
-scripts/run_experiment.py   v2 experiment: development / freeze / one-time final holdout
+scripts/run_experiment.py   Experiments (v2, v3): development / freeze / one-time final holdout
+scripts/johansen_size_study.py  Monte Carlo size of Engle-Granger vs Johansen on independent random walks
 config/research_v2.yaml     The audited, pre-registered v2 protocol (the baseline stays in default_config.yaml)
+config/research_v3.yaml     The v3 protocol: v2 plus the realism and robustness options, with NSE market overrides
 docs/audit/                 Phase 1 audit report, baseline record, diagnostics scripts
-docs/research/              Pre-registration, freeze record, holdout marker, research report
+docs/research/              v2: pre-registration, freeze record, holdout marker, research report, results
+docs/research/v3/           v3: pre-registration, development report, results
 scripts/generate_sample_data.py  Regenerates the synthetic sample CSVs
 notebooks/pairs_research.ipynb   Step-by-step research walkthrough
-tests/                      203 offline pytest tests (see Testing)
+tests/                      264 offline pytest tests (see Testing)
+.github/workflows/tests.yml CI: the test suite on Linux, Windows and macOS, Python 3.10 to 3.14
 data/raw/                   Download cache (git-ignored)   data/sample/  SYNTHETIC CSVs only
 reports/                    Timestamped research-run snapshots (git-ignored)
 ```
@@ -200,6 +227,20 @@ The dashboard reports the statistic, p-value, 1/5/10% critical values, the chose
 and the decision. It also runs ADF checks that each log price is I(1). Pairs that fail are shown with a prominent
 warning and are never described as cointegrated opportunities.
 
+**Both directions and Johansen.** The engine can also run Engle-Granger with the legs swapped and the Johansen
+trace and maximum-eigenvalue tests on each fitting window. `cointegration.record_all_tests` records them, and
+`cointegration.gate` chooses which must pass before a window is traded:
+
+* `eg`: Engle-Granger, A on B (the default);
+* `eg_both`: Engle-Granger in both directions;
+* `johansen`: Johansen, rank 0 rejected;
+* `eg_and_johansen`: Engle-Granger and Johansen.
+
+The dashboard's Cointegration tab shows all of them. `statsmodels`' Johansen test with a constant over-rejects
+when prices drift only weakly: in this project's simulation (`scripts/johansen_size_study.py`, 600 pairs of
+independent random walks per drift level), the 5% trace test rejected 11–12% of the time. Johansen is therefore
+best used as confirmation. The `eg_and_johansen` gate had a measured size of 2.8–3.8%.
+
 **Interpretation.** H0 is *no cointegration*. Rejecting H0 is in-sample statistical evidence that the spread was
 mean-reverting during the training window. It is not proof that the relation will persist, and the p-value is
 not the probability that the strategy is profitable. Results depend on the sample period and on which asset is
@@ -236,6 +277,7 @@ does not guarantee stable mean reversion later.
 | Long and `z ≥ −exit` / short and `z ≤ +exit` | Exit (reverted to within the exit band, or crossed it) |
 | `\|z\| ≥ stop` against the position (optional) | Stop-loss exit; no re-entry until `\|z\| < entry` |
 | Held `max_holding` bars (optional) | Time exit; no re-entry until `\|z\| < entry` |
+| Held ⌈k × half-life⌉ bars (optional, `strategy.max_holding_half_lives`) | Time exit at k times the fitting window's AR(1) half-life (per walk-forward window); combined with `max_holding`, the shorter wins |
 
 Defaults: entry 2.0, exit 0.5, stop-loss off, max holding off. A same-direction signal while a position is open
 is ignored (no pyramiding). An opposite signal first triggers the exit, and a new position can only open on a
@@ -245,7 +287,10 @@ refused.
 ### Execution timing
 
 A signal from the close of bar *t* is executed at the **close of bar t + lag** (default `lag = 1`; `lag = 0` is
-rejected). This follows the "wait one day" convention of Gatev, Goetzmann & Rouwenhorst (2006). A new position
+rejected). With `strategy.execution_price: open` it fills at the **open** of bar *t + lag* instead. Opens are
+adjusted with the close's factor (`Open × Adj Close / Close`). Units carried overnight are marked from the previous
+close to the fill price, and units held after trading from the fill to the close, so the overnight gap after a
+signal is not earned. A bar without a usable open falls back to its close, and the run reports it. This follows the "wait one day" convention of Gatev, Goetzmann & Rouwenhorst (2006). A new position
 earns returns from the next bar onward, so a signal can never earn the price move that produced it. On the last
 bar of a period, open positions are liquidated (paying exit costs) and no new positions open, so the final
 observation creates no artificial return. Tests check all of these rules, including that results up to bar *k*
@@ -259,11 +304,28 @@ are unchanged by any price after bar *k*.
   exceeds the limit by more than 10%, the position is scaled back at the next close, paying costs.
 * **Transaction costs:** commission + slippage in bps of traded notional, on **both legs**, for entries, exits and
   rebalances (defaults 5 + 5 bps per leg per side). A zero-cost setting exists for diagnostics only.
-* **Borrow fee:** annual bps on prior-close short notional, accrued daily (default 50 bps per year).
+* **Borrow fee:** annual bps on prior-close short notional of cash shorts, accrued daily (default 50 bps per year).
 * **Short selling:** an explicit assumption. If it is disabled, the backtester refuses to trade, because every
   pairs position needs one short leg.
-* **Not modelled:** interest on idle cash or short proceeds (assumed zero), margin calls, financing spreads, market
-  impact beyond linear slippage, partial fills, taxes. These are generic research assumptions, not any broker's terms.
+* **NSE cost schedule (optional, `costs.profile: nse`):**
+  * per leg and side: STT (10 bps on delivery buys and sells, 2 bps on futures sells), exchange charges, the SEBI
+    fee, stamp duty on buys, and 18% GST on brokerage + exchange + SEBI charges;
+  * plus brokerage (bps and/or per order), depository charges and slippage.
+  * The values are the researcher's understanding of the late-2024 schedule; verify them before relying on them.
+* **Futures shorts (optional, `costs.short_instrument: futures`):** short legs are single-stock futures:
+  * no borrow fee;
+  * a roll every `futures_roll_every_bars` bars, costed as a futures buy + sell plus a calendar spread;
+  * initial margin reported (with a warning if long exposure plus margin exceeds equity);
+  * optional rounding down to whole lots. Most Indian investors cannot hold multi-day cash shorts.
+* **Cash interest (optional, `portfolio.cash_interest`):**
+  * the cash balance (equity − long notional + short notional) earns the risk-free rate daily: idle capital,
+    short-sale proceeds, and the carry of short futures;
+  * the rate is `metrics.risk_free_rate`, or the calendar-year schedule `metrics.risk_free_by_year`;
+  * chained walk-forward windows also accrue it on their first bar.
+* **Per-market settings:** a `markets:` section applies overrides by the ticker suffix of leg A (for example `NS`),
+  so one config can price US pairs with generic costs and NSE pairs with statutory costs and futures.
+* **Not modelled:** margin calls, financing spreads, futures basis, time-varying lot sizes, market impact beyond
+  linear slippage, partial fills, taxes. These are research assumptions, not any broker's terms.
 
 The backtester records signal and execution timestamps, units and notional for each leg, long/short/gross/net
 exposure, cash, mark-to-market P&L, costs, turnover, equity, drawdown, realised and unrealised P&L, and a trade
@@ -272,7 +334,8 @@ log (entry/exit dates, direction, z-scores, holding period, gross P&L, costs, ne
 ### Metrics and benchmarks
 
 * Net and gross cumulative return, CAGR (n/a for periods under 1 year), annualised volatility, Sharpe ratio
-  (excess over a configurable risk-free rate, converted to a daily geometric rate; 252 periods per year), max
+  (on excess returns over a constant or calendar-year risk-free rate, converted to a daily geometric rate; 252
+  periods per year; the starting bar of a period, which has no holding period, is not charged the rate), max
   drawdown, Calmar, win rate, number of completed trades, average trade return, average holding period, turnover,
   total costs, average gross and net exposure, and % of time invested.
 * Undefined metrics (zero volatility, no drawdown, no trades, too few observations) are **NaN / "n/a", never ±∞**.
@@ -283,7 +346,7 @@ log (entry/exit dates, direction, z-scores, holding period, gross P&L, costs, ne
 ### Walk-forward evaluation
 
 Each window fits on the previous `train_window` bars (default 504, about 2 years; rolling, or optionally
-expanding). If configured, it requires the fit window to pass the EG test. It then trades the next `test_window`
+expanding). If configured, it requires the fit window to pass the cointegration gate (EG by default). It then trades the next `test_window`
 bars (default 126, about 6 months) with frozen parameters and closes positions at the window end. The next window
 starts where the previous one ended. Evaluation windows never overlap, capital is carried forward, and results
 are chained in time order. The dashboard shows each window's fit and evaluation dates, β, p-value, whether it
@@ -362,6 +425,7 @@ any later price exists or changes.
 | Step | Data used | Safeguard |
 |---|---|---|
 | Spread parameters and volatility scale | Training period | Frozen for validation and test |
+| Training rows (optional `ml.training_features: point_in_time`) | Each `pit_block`-bar block of the fitting window | Spread parameters estimated only on the `pit_estimation_window` bars **before** the block, so training features and labels are built exactly like live predictions. The baseline uses the whole fitting window's parameters, including bars after each row |
 | Classifier fit (including scaler) | Training rows with `t + H <= train_end − 1 − embargo` | **Purge:** no training label uses a validation price. Optional extra embargo (default 0). |
 | Hyperparameters | Validation rows (purged at the validation/test boundary) | Selected by validation ROC-AUC (or log loss) |
 | Probability threshold for B and C | Config (default 0.5), or best validation Sharpe over `threshold_grid` | The test period is never used |
@@ -456,26 +520,85 @@ edge exists.
 
 ---
 
+## v3 protocol: realism and robustness upgrades
+
+The audit's remaining open items are now engine options. Each is off by default, so the baseline and v2 results
+are unchanged. `config/research_v2.yaml` still reproduces the frozen v2 development run exactly.
+`config/research_v3.yaml` turns them on together:
+
+| Option | v3 setting |
+|---|---|
+| Execution | Fill at the **open** of t + 1 (`strategy.execution_price: open`) |
+| Time stop | Exit after ⌈3 × fitting-window half-life⌉ bars (`strategy.max_holding_half_lives: 3`) |
+| Cointegration gate | Engle-Granger **and** Johansen at 5% (`cointegration.gate: eg_and_johansen`); reverse EG recorded |
+| NSE pairs (`markets.NS`) | Statutory cost schedule, single-stock-futures shorts with monthly rolls, Rs 20 per futures order, 5 bps slippage |
+| US pair | Generic 5 + 5 bps, cash shorts with a 50 bps borrow fee (as in v2) |
+| Cash and Sharpe | Cash interest at approximate calendar-year T-bill averages (US 3-month, India 91-day); Sharpe on excess returns |
+| ML training rows | Point in time: 21-bar blocks, parameters from the 252 bars before each block |
+| Static workflow | Gate on the training fit; refit on train + validation before the test period |
+
+The study is pre-registered in `docs/research/v3/PREREGISTRATION.md`:
+
+* development data from 2015-01-01 to 2026-09-30 (this includes the spent v2 holdout, as disclosed there);
+* a holdout from **2026-10-01 to 2028-09-30**, which does not exist yet;
+* the v2 decision rules.
+
+The runner refuses the final stage before the holdout ends, without a freeze, or a second time.
+
+**Development results** (2017-01-03 to 2026-09-30; [`docs/research/v3/DEVELOPMENT_REPORT.md`](docs/research/v3/DEVELOPMENT_REPORT.md)):
+
+| | Pooled excess-return Sharpe [95% CI] | Trades |
+|---|---|---|
+| A. Traditional | 0.02 [−0.65, 0.63] | 10 |
+| B. ML-only (LR) / (RF) | 0.39 [−0.21, 0.89] / 0.17 [−0.39, 0.71] | 35 / 30 |
+| C. Hybrid (LR) / (RF) | 0.22 / 0.22 | 9 / 8 |
+| B0. B's rules, no model | 0.06 [−0.50, 0.62] | 23 |
+| Pooled ROC-AUC, LR / RF | 0.502 / 0.500 (Brier skill −0.09 / −0.01) | |
+
+* **No ML skill.** Point-in-time training did not create predictive skill. Gate (a) of the decision rules fails
+  for both models, so no ML candidate can be retained whatever the holdout shows. This is disclosed before any
+  holdout data exists.
+* **Rarely traded.** The stricter gate traded 6 of 58 pair-windows (Engle-Granger alone: 10), and the book is flat
+  about 96% of the time.
+* **The headline returns are mostly interest.** The 52–63% cumulative returns are mostly T-bill interest on idle
+  cash. With cash interest off, A returns −0.1%.
+* **The realism upgrades bite for active strategies.** Re-pricing the same signals under v2's assumptions raises
+  B-LR's Sharpe from 0.39 to 0.52 but leaves A's near zero.
+
+The specification is not frozen yet. Freezing (`--freeze`) and the one-time holdout evaluation after 2028-09-30
+are the remaining steps.
+
+---
+
 ## Dashboard
 
 `streamlit run app.py` opens at http://localhost:8501. The sidebar holds the data source, tickers, date range,
 split proportions, significance level, entry/exit/stop/max-holding settings, execution lag, commission, slippage,
 borrow fee, short-selling assumption, capital, gross-exposure limit, risk-free rate, walk-forward settings, a
-**research protocol** selector (Baseline, or v2 audited using `config/research_v2.yaml`'s data and ML settings), ML
-settings (on/off, horizon, tolerance, minimum |z|, probability threshold and its source, embargo), the source of
-the test-period thresholds, and the **"Reveal final test-period results"** switch. Under the baseline protocol the
+**research protocol** selector, the realism and robustness options (all off in the baseline), ML settings, the
+source of the test-period thresholds, and the **"Reveal final test-period results"** switch:
+
+* **Protocols:** Baseline; v2 audited (`config/research_v2.yaml`'s data and ML settings); v3 realistic
+  (`config/research_v3.yaml`).
+* **Realism and robustness options:** cointegration gate, static gate and refit, half-life time stop, close or
+  open fills, generic or NSE cost model, cash or futures shorts, cash interest with a constant or calendar-year
+  rate.
+* **ML settings:** on/off, horizon, tolerance, minimum |z|, probability threshold and its source, embargo, and
+  in-sample or point-in-time training rows.
+
+Under v3 the defaults follow the protocol file and the market of leg A (`.NS`), and every value stays editable. Under the baseline protocol the
 ML tabs warn that walk-forward hyperparameters come from the static validation period (audit finding D1).
 
 | Tab | Contents |
 |---|---|
 | A. Overview | Assets, range, observation count, data quality, provenance (source, retrieval time, hash), split table |
 | B. Exploratory analysis | Prices, normalised prices, returns, rolling volatility and correlation, log-price scatter with training fit, summary statistics, missing data |
-| C. Cointegration | Training-period regression, β, α, EG statistic, p-value, critical values, I(1) checks, interpretation |
+| C. Cointegration | Training-period regression, β, α, EG statistic, p-value, critical values, I(1) checks, interpretation; EG with the legs swapped, Johansen trace and max-eigenvalue tests, the three hedge ratios and every gate's verdict |
 | D. Spread and signals | Spread and z-score with period shading, thresholds, signal markers, and signal → execution log |
 | E. Portfolio and backtest | Leg weights, exposure, equity vs benchmarks, drawdown, gross vs net, cumulative costs, positions, trades |
 | F. Performance report | Metrics by period (training / validation / test / walk-forward), strategy vs benchmarks, trade returns |
 | G. Robustness | Validation heatmaps, cost sensitivity, walk-forward windows, yearly returns, universe screen |
-| H. Assumptions | Price adjustment, short selling, borrow, costs, timing, estimation windows, data source |
+| H. Assumptions | Price adjustment, short selling (cash or futures), borrow and cash interest, costs (generic or the NSE schedule with all-in rates), fill timing, risk controls, cointegration gate, estimation windows, data source |
 | I. ML models | Target definition, samples and evaluation dates per period, model settings and tuning tables, classification metrics (training / validation / test clearly labelled), predicted probability vs actual target, confusion matrix, calibration, RF importance, LR coefficients |
 | J. Strategy comparison (A/B/C) | Metrics table, equity curves, drawdowns and transaction costs for A, B and C (LR and RF) on identical dates. Period switch: training, validation, test, walk-forward. Walk-forward per-window heatmap and table. Validation threshold grids. |
 | Export | CSV downloads (returns, equity, positions, trades, signals, metrics, ML predictions, metrics, calibration, importance, comparisons), statistical tests JSON, config YAML, run snapshot |
@@ -499,13 +622,17 @@ invalid parameter combinations (for example exit ≥ entry) each produce a speci
 * Cached downloads keep their original hash. If a cached file changes, a warning is raised. **Free providers may
   revise or remove historical data**, so a later re-download can differ; compare the hashes.
 * Synthetic data and tests are deterministic (fixed seeds). Exact package versions are in `requirements-lock.txt`.
+* Each pre-registered study keeps its pre-registration, freeze record and holdout marker in its own
+  `holdout.protocol_dir` (`docs/research` for v2, `docs/research/v3` for v3). Every experiment run records the
+  SHA-256 of the engine code, config and pre-registration. Committed result copies use `-text` in `.gitattributes`
+  so the hashes verify on every platform.
 
 ---
 
 ## Testing
 
 ```bash
-pytest            # 203 tests, about 4-5 min, fully offline
+pytest            # 264 tests, about 4-6 min, fully offline
 ```
 
 | File | Covers |
@@ -528,8 +655,13 @@ pytest            # 203 tests, about 4-5 min, fully offline
 | `test_baseline_preserved.py` | **The default config reproduces the pre-audit golden outputs exactly** (`tests/data/golden_baseline_synthetic.json`, captured before any fix) |
 | `test_audit_fixes.py` | One or more regression tests per audit fix: **nested walk-forward is point-in-time** (later prices never change earlier windows), static-mode disclosure, unsafe option combination rejected, holdout schedule anchor, special-session detection / drop / point-in-time volume rule / exchange-specific dates, calmar selection, exported trade logs, holdout guard, unweighted LR matches the base rate, prevalence-baseline skill by hand, Sortino by hand, stationary bootstrap, bootstrap intervals, effective sample size, B0 control |
 | `test_experiment.py` | Union-calendar pooling, **repricing reproduces the walk-forward exactly**, cost sensitivity monotone, nested tuning required, pooled classification vs prevalence baseline by hand, **every branch of the pre-registered decision rules** |
+| `test_realism.py` | NSE rates by hand, generic model = original costs, lot rounding, **next-open fills earn only after the fill**, open-mode truncation invariance, close fallback, adjusted opens, futures round trip / rolls / lots by hand, cash interest base, risk-free schedules, **a flat book earns exactly the risk-free rate (zero excess)** in single periods and chained walk-forward windows |
+| `test_cointegration_suite.py` | Every gate on cointegrated and independent pairs, EG direction asymmetry, Johansen input checks and recorded failures, gate validation, per-market config overrides |
+| `test_research_options.py` | Half-life time stop (static and per window), static gate and pre-test refit, gate variants in walk-forward, next-open execution end to end, NSE costs with futures shorts and interest, untouched US pair, excess-return pooling, **repricing reproduces open-execution NSE runs exactly**, **point-in-time rows read no later data**, point-in-time static and walk-forward ML, ML following the refit and the gate |
 
 Statistical tests are probabilistic, so fixed seeds are used and the size check uses generous binomial bounds.
+GitHub Actions runs the suite on Linux, Windows and macOS with Python 3.10 to 3.14 on every push to `main` and on
+pull requests.
 
 ---
 
@@ -623,13 +755,14 @@ other pairs). Results can change if the provider revises its data.
   split or dividend adjustment produce false signals. Suspicious jumps are flagged but not corrected.
 * **Short selling may be unavailable or expensive.** Borrow can be scarce, recalled or banned. Indian cash
   equities generally cannot be shorted overnight outside the securities lending scheme (SLB) or derivatives.
-* **Borrowing, financing, liquidity and market impact** can reduce or eliminate returns. These are modelled only by
-  simple linear costs and a flat borrow fee.
+* **Borrowing, financing, liquidity and market impact** can reduce or eliminate returns. They are modelled by
+  linear costs, a flat borrow fee or futures rolls, and cash interest at approximate annual rates. Market impact,
+  futures basis and margin calls are not modelled.
 * **Parameter searches and pair selection create multiple-testing bias.** Every pair, threshold and window that is
   tried, formally or informally, weakens the evidence of the result that is finally reported. Benjamini-Hochberg
   only corrects for the tests it is given.
 * **Survivorship bias:** universes built from today's listed companies leave out failed and delisted firms.
-* **Simplified execution:** fills at the close of the next bar, no partial fills, no intraday risk, no
+* **Simplified execution:** fills at the next bar's close or open, no partial fills, no intraday risk, no
   non-synchronous closes across exchanges.
 * **ML-specific limitations:**
   * Samples are small and overlapping. A few hundred eligible rows per period, with neighbouring rows sharing
@@ -666,11 +799,13 @@ other pairs). Results can change if the provider revises its data.
 ## Future improvements
 
 * Kalman-filter or rolling-OLS dynamic hedge ratios, with tests for look-ahead.
-* Johansen test and symmetric (total-least-squares) hedge ratios. Test both regression orderings with correction.
-* Next-open execution using split-adjusted opens, and volume-based market-impact and capacity models.
+* Trading on symmetric hedge ratios (total least squares, or the Johansen vector already reported), and a
+  bootstrap Johansen test with correct size.
+* Volume-based market-impact and capacity models; futures basis and time-varying NSE lot sizes.
+* Daily risk-free series from official sources (FRED, RBI) instead of approximate annual averages.
 * Volatility-targeted position sizing, and portfolio-level aggregation across many pairs.
 * Structural-break diagnostics (Chow, CUSUM) and regime filters.
-* Block-bootstrap confidence intervals for Sharpe ratios and the deflated Sharpe ratio for multiple testing.
+* The deflated Sharpe ratio for multiple testing.
 * Point-in-time universes to reduce survivorship bias.
 * Pool training rows across many pairs (with pair-level purging) to give the classifiers enough data.
 * Probability calibration (Platt or isotonic) fitted on a separate calibration split, and abstention when |z| is
@@ -690,10 +825,13 @@ Accurate wording, based on what this repository actually does:
 > spread mean reversion with causal features, purged chronological labels and validation-only tuning, and compared
 > traditional, ML-only and hybrid strategies on identical out-of-sample dates with walk-forward re-estimation.
 > Audited the platform, found and fixed a hyperparameter look-ahead and other defects behind opt-in, regression-
-> tested options (203 offline pytest tests, including golden-baseline, look-ahead and label-leakage checks). Ran a
-> pre-registered experiment with nested walk-forward tuning, bootstrap confidence intervals and a one-time
-> 2025–2026 holdout. The pre-registered decision rejected the hypothesis: the ML models showed no out-of-sample
-> skill and the pairs strategy showed no reliable edge after costs.
+> tested options (264 offline pytest tests, including golden-baseline, look-ahead and label-leakage checks,
+> run in CI on Linux, Windows and macOS). Ran a pre-registered experiment with nested walk-forward tuning,
+> bootstrap confidence intervals and a one-time 2025–2026 holdout. The pre-registered decision rejected the
+> hypothesis: the ML models showed no out-of-sample skill and the pairs strategy showed no reliable edge after
+> costs. Extended the engine with next-open execution, an NSE statutory cost model with single-stock-futures
+> shorting, cash interest at calendar-year rates, Engle-Granger in both directions plus Johansen gates and
+> point-in-time ML training rows, and pre-registered a v3 study with a 2026–2028 holdout.
 
 Do not claim the strategy, or the ML enhancement, is profitable or superior: the evidence above does not support
 that.

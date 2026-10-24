@@ -1,0 +1,1 @@
+window,trade_id,status,direction,entry_signal_date,entry_date,exit_signal_date,exit_date,exit_reason,entry_z,exit_z,holding_days,entry_equity,entry_price_a,entry_price_b,exit_price_a,exit_price_b,units_a,units_b,entry_notional_a,entry_notional_b,rebalances,gross_pnl,transaction_costs,borrow_costs,net_pnl,gross_return,net_return,rolls
