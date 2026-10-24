@@ -59,3 +59,38 @@ def test_v2_protocol_runs_and_shows_prevalence_baseline():
     _run(at)
     assert any("B0" in m.value for m in at.markdown)  # comparison tab describes the control
     assert not any("audit finding D1" in w.value for w in at.warning)  # nested tuning: no static-mode warning
+
+
+def test_v3_protocol_shows_the_realism_options():
+    at = _run(AppTest.from_file(APP, default_timeout=300))
+    protocol = next(r for r in at.sidebar.radio if r.label == "Protocol")
+    protocol.set_value("v3 realistic (config/research_v3.yaml)")
+    _run(at)
+    assert next(r for r in at.sidebar.radio if r.label == "Fill price").value == "open"
+    assert next(r for r in at.sidebar.radio if r.label == "ML training rows").value == "point_in_time"
+    assert next(s for s in at.sidebar.selectbox if s.label == "Cointegration gate").value == "eg_and_johansen"
+    assert any("Both regression directions and Johansen" in h.value for h in at.subheader)
+    text = " ".join(m.value for m in at.markdown)
+    assert "Training rows are built point in time" in text
+    assert "trades fill at the **open**" in text and "Cash earns the risk-free rate" in text
+    assert not any("audit finding D1" in w.value for w in at.warning)
+
+
+def test_nse_costs_with_futures_shorts_render():
+    at = _run(AppTest.from_file(APP, default_timeout=300))
+    next(r for r in at.sidebar.radio if r.label == "Cost model").set_value("nse")
+    _run(at)
+    next(r for r in at.sidebar.radio if r.label == "Short leg").set_value("futures")
+    _run(at)
+    text = " ".join(m.value for m in at.markdown)
+    assert "NSE statutory schedule" in text and "single-stock futures" in text
+    assert next(n for n in at.sidebar.number_input if n.label == "Short borrow fee (bps per year)").disabled
+
+
+def test_johansen_gate_flags_independent_pair():
+    at = _run(AppTest.from_file(APP, default_timeout=300))
+    next(s for s in at.sidebar.selectbox if s.label == "Cointegration gate").set_value("johansen")
+    _run(at)
+    next(r for r in at.sidebar.radio if r.label == "Synthetic relation").set_value("Independent random walks")
+    _run(at)
+    assert any("does not pass the training-period cointegration gate (Johansen trace test)" in e.value for e in at.error)

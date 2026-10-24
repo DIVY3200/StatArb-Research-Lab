@@ -1,0 +1,211 @@
+# StatArb Research Lab - v3 research protocol (pre-registered in docs/research/v3/PREREGISTRATION.md).
+#
+# v3 = the v2 protocol plus the realism and robustness upgrades, evaluated on a new, future holdout.
+# Differences from config/research_v2.yaml are marked "v3:". Market-specific settings (NSE costs, futures
+# shorts, INR rates) are in the `markets:` section at the end and apply only to pairs whose leg A has that
+# ticker suffix (e.g. TCS.NS -> NS); everything else applies to every pair.
+
+data:
+  source: yfinance
+  asset_a: TCS.NS
+  asset_b: INFY.NS
+  candidate_pairs:                  # unchanged from v2: all three analysed, none may be dropped
+    - [KO, PEP]
+    - [HDFCBANK.NS, ICICIBANK.NS]
+    - [TCS.NS, INFY.NS]
+  start_date: "2015-01-01"
+  end_date: "2026-09-30"            # v3: development data ends where the (spent) v2 holdout ended
+  prefer_adjusted: true
+  cache_dir: data/raw
+  min_observations: 252
+  max_gap_days: 7
+  extreme_return_threshold: 0.25
+  special_sessions: drop
+  special_session_dates: []
+  # NSE Muhurat (Diwali) sessions known to the researcher (same list as v2). Later sessions are caught by the
+  # weekend and volume rules (Diwali 2026 falls on a Sunday).
+  special_session_dates_by_exchange:
+    NS: ["2015-11-11", "2016-10-30", "2017-10-19", "2018-11-07", "2019-10-27", "2020-11-14",
+         "2021-11-04", "2022-10-24", "2023-11-12", "2024-11-01", "2025-10-21"]
+  special_session_volume_ratio: 0.1
+
+splits:
+  train: 0.6
+  validation: 0.2
+  test: 0.2
+
+cointegration:
+  significance: 0.05
+  trend: c
+  autolag: AIC
+  min_observations: 100
+  # v3: trade a window only if Engle-Granger (A on B) AND the Johansen trace test (r = 0) both reject at 5%.
+  # Johansen alone over-rejects with weakly drifting prices (see statarb.cointegration.johansen_test); the
+  # conjunction keeps the size at or below Engle-Granger's.
+  gate: eg_and_johansen
+  record_all_tests: true            # v3: reverse EG and Johansen recorded for every fitting window
+  johansen_det_order: 0
+  johansen_k_ar_diff: 1
+
+hedge_ratio:
+  method: ols_log_price
+
+spread:
+  min_std: 1.0e-8
+
+strategy:
+  entry_z: 2.0
+  exit_z: 0.5
+  stop_loss_z: null
+  max_holding_days: null
+  execution_lag: 1
+  max_holding_half_lives: 3.0       # v3: time stop after 3 x the fitting window's AR(1) half-life
+  execution_price: open             # v3: a signal at close t fills at the OPEN of t + 1 (close-to-open gap modelled)
+
+portfolio:
+  initial_capital: 1000000.0
+  max_gross_exposure: 1.0
+  rebalance_tolerance: 0.10
+  close_at_period_end: true
+  cash_interest: true               # v3: cash, short proceeds and futures carry earn the market's risk-free rate
+
+costs:                              # US and generic defaults (unchanged from v2); NSE pairs: see markets
+  commission_bps: 5.0
+  slippage_bps: 5.0
+  borrow_bps_annual: 50.0
+  short_selling_allowed: true
+  profile: generic
+  short_instrument: cash
+
+metrics:
+  periods_per_year: 252
+  risk_free_rate: 0.0               # unused when risk_free_by_year is set
+  min_years_for_cagr: 1.0
+  # v3: approximate calendar-year averages of the US 3-month Treasury bill yield (FRED TB3MS), entered by the
+  # researcher. 2025-2026 are partly estimated; years after 2026 reuse the 2026 rate (pre-registered).
+  risk_free_by_year:
+    2015: 0.0005
+    2016: 0.0032
+    2017: 0.0093
+    2018: 0.0194
+    2019: 0.0206
+    2020: 0.0037
+    2021: 0.0004
+    2022: 0.0202
+    2023: 0.0507
+    2024: 0.0497
+    2025: 0.0420
+    2026: 0.0370
+
+evaluation:
+  test_parameter_source: config
+  selection_metric: sharpe
+  min_trades_for_selection: 3
+  static_require_cointegration: true   # v3 (static workflow / dashboard): no trading if the training fit fails the gate
+  static_refit_before_test: true       # v3 (static workflow / dashboard): refit on train + validation before the test
+
+walk_forward:
+  train_window: 504
+  test_window: 126
+  expanding: false
+  require_cointegration: true
+  min_eval_observations: 20
+
+robustness:
+  entry_grid: [1.5, 2.0, 2.5, 3.0]
+  exit_grid: [0.0, 0.25, 0.5, 1.0]
+  # Per leg per side. Generic (US): commission + slippage combined. NSE: slippage on top of statutory charges.
+  cost_grid_bps: [0.0, 10.0, 20.0, 40.0]
+
+synthetic:
+  n_observations: 2520
+  hedge_ratio: 0.8
+  intercept: 0.4
+  half_life: 15.0
+  residual_volatility: 0.012
+  seed: 42
+
+reproducibility:
+  random_seed: 42
+  reports_dir: reports
+
+ml:
+  enabled: true
+  horizon: 5
+  tolerance_z: 0.25
+  min_abs_z: 1.0
+  embargo: 0
+  z_lags: [1, 2, 5]
+  momentum_window: 10
+  volatility_window: 20
+  correlation_window: 20
+  return_windows: [1, 5]
+  probability_threshold: 0.5        # unused (threshold_mode: prevalence)
+  threshold_source: config
+  threshold_grid: [0.5, 0.55, 0.6, 0.65, 0.7]
+  tuning_metric: log_loss
+  logistic_c_grid: [0.01, 0.1, 1.0, 10.0]
+  rf_n_estimators: 200
+  rf_max_depth_grid: [3, 6]
+  rf_min_samples_leaf_grid: [10, 30]
+  min_train_samples: 60
+  min_class_count: 10
+  min_eval_samples: 30
+  calibration_bins: 5
+  walk_forward_tuning: nested
+  inner_validation_fraction: 0.3
+  class_weight: none
+  threshold_mode: prevalence
+  prevalence_multiplier: 1.0
+  include_prevalence_baseline: true
+  # v3: training rows built point in time: each 21-bar block uses spread parameters estimated only on the
+  # 252 bars before it, so training features are constructed exactly like live predictions. 252 (not 504)
+  # leaves the first walk-forward window enough rows to fit.
+  training_features: point_in_time
+  pit_estimation_window: 252
+  pit_block: 21
+
+holdout:                            # v3: a new holdout that does not exist yet on the registration date
+  enforce: true
+  development_end: "2026-09-30"
+  holdout_start: "2026-10-01"
+  holdout_end: "2028-09-30"
+  protocol_dir: docs/research/v3
+
+inference:
+  bootstrap_samples: 5000
+  mean_block_length: 20.0
+  confidence: 0.95
+  seed: 20261024
+
+markets:
+  NS:                               # v3: pairs with an NSE leg A (.NS)
+    costs:
+      profile: nse                  # statutory schedule (STT, exchange, SEBI, stamp, GST) + brokerage + slippage
+      short_instrument: futures     # multi-day cash shorts are not available to most Indian investors
+      commission_bps: 0.0           # unused by the nse profile (brokerage below)
+      slippage_bps: 5.0
+      borrow_bps_annual: 0.0        # futures shorts pay no borrow fee
+      brokerage_bps: 0.0
+      brokerage_flat_cash: 0.0      # discount-broker delivery brokerage
+      brokerage_flat_futures: 20.0  # Rs 20 per executed futures order, before GST
+      dp_charge_cash_sell: 15.93    # depository charge per delivery sell, including GST
+      futures_roll_every_bars: 21   # monthly expiry
+      futures_roll_spread_bps: 2.0
+      futures_margin_rate: 0.2
+      futures_lot_sizes: {}         # not modelled: lot sizes changed during the sample (see the pre-registration)
+    metrics:
+      # Approximate calendar-year averages of the Indian 91-day Treasury bill yield, entered by the researcher.
+      risk_free_by_year:
+        2015: 0.0760
+        2016: 0.0670
+        2017: 0.0620
+        2018: 0.0660
+        2019: 0.0590
+        2020: 0.0380
+        2021: 0.0340
+        2022: 0.0500
+        2023: 0.0680
+        2024: 0.0670
+        2025: 0.0570
+        2026: 0.0540

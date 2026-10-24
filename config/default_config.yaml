@@ -31,6 +31,13 @@ cointegration:
   trend: c                     # constant in the cointegrating regression
   autolag: AIC                 # lag selection for the residual ADF regression
   min_observations: 100
+  # Trading gate for a fitting window: eg (Engle-Granger, A on B) | eg_both (EG in both directions)
+  # | johansen (Johansen trace test, rank 0 rejected) | eg_and_johansen. Johansen over-rejects with weakly
+  # drifting prices (scripts/johansen_size_study.py), so prefer eg_and_johansen to johansen alone.
+  gate: eg
+  record_all_tests: false      # also record reverse EG and Johansen for every fitting window
+  johansen_det_order: 0        # -1 none, 0 constant, 1 linear trend
+  johansen_k_ar_diff: 1        # lagged differences in the Johansen VECM
 
 hedge_ratio:
   method: ols_log_price        # log(P_A) = intercept + hedge_ratio * log(P_B) + residual
@@ -43,23 +50,47 @@ strategy:
   exit_z: 0.5
   stop_loss_z: null            # disabled by default; e.g. 4.0
   max_holding_days: null       # disabled by default; e.g. 60
-  execution_lag: 1             # signal at close t -> trade at close t+1 (must be >= 1)
+  execution_lag: 1             # signal at close t -> trade at bar t+1 (must be >= 1)
+  execution_price: close       # close | open (fill at the open of t+lag; needs opening prices)
+  max_holding_half_lives: null # e.g. 3.0: time stop after ceil(3 x the fitting window's AR(1) half-life) bars
 
 portfolio:
   initial_capital: 1000000.0
   max_gross_exposure: 1.0      # |long notional| + |short notional| <= 1.0 x equity at entry
   rebalance_tolerance: 0.10    # rescale an open trade if gross leverage drifts >10% above the limit
   close_at_period_end: true    # liquidate open positions on the final bar of each evaluation period
+  cash_interest: false         # credit the risk-free rate on equity - long notional + short notional
 
 costs:
   commission_bps: 5.0          # per leg, per side, on traded notional
   slippage_bps: 5.0            # per leg, per side, on traded notional
-  borrow_bps_annual: 50.0      # annual fee on short notional, accrued daily
+  borrow_bps_annual: 50.0      # annual fee on short notional, accrued daily (cash shorts only)
   short_selling_allowed: true  # explicit research assumption
+  profile: generic             # generic (commission + slippage) | nse (statutory schedule below + slippage)
+  short_instrument: cash       # cash (borrow fee) | futures (no borrow fee, rolls, margin reported)
+  # NSE schedule, bps of traded notional (late-2024 rates as understood by the researcher; verify against current
+  # NSE/SEBI circulars and your broker's contract notes). Used only with profile: nse.
+  stt_delivery_bps: 10.0       # securities transaction tax on delivery buys and sells
+  stt_futures_sell_bps: 2.0    # STT on futures sells
+  exchange_cash_bps: 0.297
+  exchange_futures_bps: 0.173
+  sebi_fee_bps: 0.01
+  stamp_delivery_buy_bps: 1.5
+  stamp_futures_buy_bps: 0.2
+  gst_rate: 0.18               # GST on brokerage + exchange + SEBI charges
+  brokerage_bps: 0.0
+  brokerage_flat_cash: 0.0     # per cash order, before GST
+  brokerage_flat_futures: 0.0  # per futures order, before GST
+  dp_charge_cash_sell: 0.0     # depository charge per delivery sell (all-in)
+  futures_roll_every_bars: 21  # futures shorts: roll after this many bars held
+  futures_roll_spread_bps: 2.0 # extra cost per roll on the rolled notional
+  futures_margin_rate: 0.2     # initial margin share of futures notional (reported, not binding)
+  futures_lot_sizes: {}        # e.g. {TCS.NS: 175}: futures quantities rounded down to whole lots
 
 metrics:
   periods_per_year: 252
   risk_free_rate: 0.0          # annual; converted to a daily geometric rate
+  risk_free_by_year: {}        # optional {year: annual rate}; replaces risk_free_rate (later years reuse the last)
   min_years_for_cagr: 1.0      # CAGR is reported as undefined for shorter periods
 
 evaluation:
@@ -69,6 +100,8 @@ evaluation:
   test_parameter_source: config
   selection_metric: sharpe
   min_trades_for_selection: 3
+  static_require_cointegration: false   # hold static periods flat when the training fit fails the gate
+  static_refit_before_test: false       # refit the spread model on train + validation before the test period
 
 walk_forward:
   train_window: 504            # ~2 years of daily bars used to fit each window
@@ -118,3 +151,8 @@ ml:
   min_class_count: 10          # each class needs at least this many training rows
   min_eval_samples: 30         # fewer evaluation rows -> classification metrics reported as n/a
   calibration_bins: 5
+  # Training rows: in_sample (spread parameters from the whole fitting window) | point_in_time (each block of
+  # pit_block bars uses parameters estimated only on the pit_estimation_window bars before it).
+  training_features: in_sample
+  pit_estimation_window: null  # null -> walk_forward.train_window
+  pit_block: 21

@@ -24,6 +24,7 @@ from dataclasses import asdict, dataclass, field
 import numpy as np
 import pandas as pd
 from statsmodels.tsa.stattools import adfuller, coint
+from statsmodels.tsa.vector_ar.vecm import coint_johansen
 
 from .hedge_ratio import estimate_hedge_ratio
 
@@ -203,6 +204,142 @@ def engle_granger_test(
     return result
 
 
+_JOHANSEN_COLUMN = {0.10: 0, 0.05: 1, 0.01: 2}
+
+
+@dataclass
+class JohansenResult:
+    """Johansen (1991) cointegration rank test for the two log prices (H0 for the trace test: rank 0)."""
+
+    trace_statistic: float
+    trace_critical_values: dict[str, float]
+    max_eigen_statistic: float
+    max_eigen_critical_values: dict[str, float]
+    trace_statistic_r1: float
+    trace_critical_value_r1: float
+    significance: float
+    reject_r0: bool
+    rank: int
+    hedge_ratio: float
+    n_obs: int
+    det_order: int
+    k_ar_diff: int
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+def johansen_test(log_a: pd.Series, log_b: pd.Series, significance: float = 0.05, det_order: int = 0,
+                  k_ar_diff: int = 1, min_obs: int = 100) -> JohansenResult:
+    """Johansen trace and maximum-eigenvalue tests on ``[log_a, log_b]``.
+
+    Unlike Engle-Granger, the test is symmetric in the two series. ``rank`` follows the sequential trace
+    procedure (0, 1 or 2; rank 2 would mean both series are stationary). ``hedge_ratio`` comes from the
+    first cointegrating vector normalised on A, i.e. log A - h log B.
+
+    Size caveat (measured, not assumed): ``det_order=0`` is statsmodels' unrestricted-constant case,
+    whose critical values assume clearly trending prices. With the weak drift typical of daily equity
+    prices it over-rejects: on independent random walks (756 bars, 0-0.05% drift per bar, 600 runs)
+    the 5% trace test rejected 11-12% of the time, and the ``r <= 1`` step reported rank 2 for about a
+    third of genuinely cointegrated synthetic pairs. Treat ``rank`` as a diagnostic, and prefer the
+    ``eg_and_johansen`` gate (its size is bounded by Engle-Granger's) to Johansen alone.
+    """
+    column = next((c for level, c in _JOHANSEN_COLUMN.items() if abs(level - significance) < 1e-12), None)
+    if column is None:
+        raise ValueError("Johansen critical values exist only at the 10%, 5% and 1% levels")
+    if not log_a.index.equals(log_b.index):
+        raise ValueError("log_a and log_b must share an identical index (align the pair first).")
+    if len(log_a) < min_obs:
+        raise ValueError(f"Johansen test needs at least {min_obs} observations, got {len(log_a)}.")
+    data = np.column_stack([log_a.to_numpy(float), log_b.to_numpy(float)])
+    if not np.isfinite(data).all():
+        raise ValueError("Log prices contain NaN or infinite values; clean the data first.")
+    if np.std(data[:, 0]) < 1e-12 or np.std(data[:, 1]) < 1e-12:
+        raise ValueError("A log-price series is constant in the window; the Johansen test is undefined.")
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            res = coint_johansen(data, det_order, k_ar_diff)
+    except np.linalg.LinAlgError as exc:
+        raise ValueError(f"Johansen test failed (singular system, e.g. perfectly collinear series): {exc}") from exc
+    labels = ("90%", "95%", "99%")
+    trace0, trace1 = float(np.real(res.lr1[0])), float(np.real(res.lr1[1]))
+    crit0, crit1 = float(res.cvt[0, column]), float(res.cvt[1, column])
+    rank = 0 if trace0 <= crit0 else (1 if trace1 <= crit1 else 2)
+    vec = np.real(res.evec[:, 0])  # eig may return a complex dtype with zero imaginary parts
+    hedge = float(-vec[1] / vec[0]) if abs(vec[0]) > 1e-12 else float("nan")
+    return JohansenResult(
+        trace_statistic=trace0, trace_critical_values=dict(zip(labels, map(float, res.cvt[0]))),
+        max_eigen_statistic=float(np.real(res.lr2[0])),
+        max_eigen_critical_values=dict(zip(labels, map(float, res.cvm[0]))),
+        trace_statistic_r1=trace1, trace_critical_value_r1=crit1, significance=float(significance),
+        reject_r0=bool(trace0 > crit0), rank=int(rank), hedge_ratio=hedge, n_obs=int(len(log_a)),
+        det_order=int(det_order), k_ar_diff=int(k_ar_diff),
+    )
+
+
+GATES = ("eg", "eg_both", "johansen", "eg_and_johansen")
+
+
+@dataclass
+class CointegrationSuite:
+    """Engle-Granger in both directions plus Johansen, on one fitting window."""
+
+    eg_ab: CointegrationResult
+    eg_ba: CointegrationResult
+    johansen: JohansenResult | None
+    johansen_error: str = ""
+
+    def passes(self, gate: str = "eg") -> bool:
+        """Whether the window passes a trading gate (see ``cointegration.gate`` in the config)."""
+        johansen_ok = self.johansen is not None and self.johansen.reject_r0
+        if gate == "eg":
+            return self.eg_ab.reject_null
+        if gate == "eg_both":
+            return self.eg_ab.reject_null and self.eg_ba.reject_null
+        if gate == "johansen":
+            return johansen_ok
+        if gate == "eg_and_johansen":
+            return self.eg_ab.reject_null and johansen_ok
+        raise ValueError(f"Unknown cointegration gate {gate!r}; expected one of {GATES}")
+
+    def summary(self) -> dict[str, object]:
+        j = self.johansen
+        return {
+            "eg_ab_p_value": self.eg_ab.p_value, "eg_ab_pass": self.eg_ab.reject_null,
+            "eg_ba_p_value": self.eg_ba.p_value, "eg_ba_pass": self.eg_ba.reject_null,
+            "johansen_trace": j.trace_statistic if j else float("nan"),
+            "johansen_trace_crit": j.trace_critical_values[f"{(1 - j.significance):.0%}"] if j else float("nan"),
+            "johansen_pass": bool(j.reject_r0) if j else False, "johansen_rank": j.rank if j else -1,
+            "johansen_hedge_ratio": j.hedge_ratio if j else float("nan"),
+            "eg_hedge_ratio": self.eg_ab.hedge_ratio,
+            "johansen_error": self.johansen_error,
+        }
+
+    def to_dict(self) -> dict[str, object]:
+        return {"eg_a_on_b": self.eg_ab.to_dict(), "eg_b_on_a": self.eg_ba.to_dict(),
+                "johansen": self.johansen.to_dict() if self.johansen else None, "johansen_error": self.johansen_error,
+                "summary": self.summary()}
+
+
+def cointegration_suite(log_a: pd.Series, log_b: pd.Series, significance: float = 0.05, trend: str = "c",
+                        autolag: str | None = "AIC", min_obs: int = 100, det_order: int = 0, k_ar_diff: int = 1,
+                        name_a: str = "A", name_b: str = "B", eg_ab: CointegrationResult | None = None
+                        ) -> CointegrationSuite:
+    """Run EG (A on B), EG (B on A) and Johansen on the same window. Pass ``eg_ab`` to reuse a result."""
+    if eg_ab is None:
+        eg_ab = engle_granger_test(log_a, log_b, significance, trend, autolag, min_obs, name_a, name_b)
+    eg_ba = engle_granger_test(log_b, log_a, significance, trend, autolag, min_obs, name_b, name_a,
+                               check_integration=False)
+    johansen, error = None, ""
+    try:
+        johansen = johansen_test(log_a, log_b, significance if significance in _JOHANSEN_COLUMN else 0.05,
+                                 det_order, k_ar_diff, min_obs)
+    except ValueError as exc:
+        error = str(exc)
+    return CointegrationSuite(eg_ab, eg_ba, johansen, error)
+
+
 def benjamini_hochberg(p_values, alpha: float = 0.05) -> tuple[np.ndarray, np.ndarray]:
     """Benjamini-Hochberg false-discovery-rate procedure.
 
@@ -233,6 +370,11 @@ def benjamini_hochberg(p_values, alpha: float = 0.05) -> tuple[np.ndarray, np.nd
 __all__ = [
     "ASSUMPTIONS",
     "CointegrationResult",
+    "CointegrationSuite",
+    "GATES",
+    "JohansenResult",
+    "cointegration_suite",
+    "johansen_test",
     "LIMITATIONS",
     "adf_summary",
     "benjamini_hochberg",

@@ -24,6 +24,8 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 
+import numpy as np
+
 
 def target_leg_weights(state: int, hedge_ratio: float, max_gross_exposure: float) -> tuple[float, float]:
     """Dollar weights (fractions of equity) for legs A and B in a given spread state."""
@@ -78,4 +80,99 @@ class CostModel:
         return asdict(self)
 
 
-__all__ = ["CostModel", "target_leg_weights"]
+@dataclass(frozen=True)
+class MarketCostModel:
+    """Per-leg, per-side cost schedule for the ``generic`` and ``nse`` profiles (all rates in bps).
+
+    * ``generic``: every trade pays ``commission_bps + slippage_bps``, whatever the instrument or side.
+    * ``nse``: cash-delivery and single-stock-futures schedules built from statutory components:
+      STT (delivery: buys and sells; futures: sells only), exchange transaction charges, the SEBI fee,
+      stamp duty (buys only), GST on brokerage + exchange + SEBI charges, plus brokerage, slippage
+      and optional flat per-order fees. The values are the researcher's understanding of the late-2024
+      schedule and must be checked against current circulars and broker contract notes.
+    * Short legs held as futures (``short_instrument="futures"``) pay no borrow fee; each roll costs a
+      futures buy + sell on the rolled notional plus ``futures_roll_spread_bps``.
+    """
+
+    profile: str = "generic"
+    commission_bps: float = 5.0
+    slippage_bps: float = 5.0
+    borrow_bps_annual: float = 0.0
+    periods_per_year: int = 252
+    short_instrument: str = "cash"
+    stt_delivery_bps: float = 10.0
+    stt_futures_sell_bps: float = 2.0
+    exchange_cash_bps: float = 0.297
+    exchange_futures_bps: float = 0.173
+    sebi_fee_bps: float = 0.01
+    stamp_delivery_buy_bps: float = 1.5
+    stamp_futures_buy_bps: float = 0.2
+    gst_rate: float = 0.18
+    brokerage_bps: float = 0.0
+    brokerage_flat_cash: float = 0.0
+    brokerage_flat_futures: float = 0.0
+    dp_charge_cash_sell: float = 0.0
+    futures_roll_spread_bps: float = 2.0
+
+    def __post_init__(self) -> None:
+        if self.profile not in {"generic", "nse"}:
+            raise ValueError("profile must be generic or nse")
+        if self.short_instrument not in {"cash", "futures"}:
+            raise ValueError("short_instrument must be cash or futures")
+
+    def instrument(self, units: float) -> str:
+        """Instrument used for a position of ``units`` (shorts use futures when configured)."""
+        return "futures" if self.short_instrument == "futures" and units < 0 else "cash"
+
+    def rate_bps(self, instrument: str, side: str) -> float:
+        if instrument not in {"cash", "futures"} or side not in {"buy", "sell"}:
+            raise ValueError("instrument must be cash/futures and side buy/sell")
+        if self.profile == "generic":
+            return self.commission_bps + self.slippage_bps
+        if instrument == "cash":
+            fees = self.exchange_cash_bps + self.sebi_fee_bps + self.brokerage_bps
+            rate = self.stt_delivery_bps + fees * (1.0 + self.gst_rate)
+            rate += self.stamp_delivery_buy_bps if side == "buy" else 0.0
+        else:
+            fees = self.exchange_futures_bps + self.sebi_fee_bps + self.brokerage_bps
+            rate = fees * (1.0 + self.gst_rate)
+            rate += self.stamp_futures_buy_bps if side == "buy" else self.stt_futures_sell_bps
+        return rate + self.slippage_bps
+
+    def flat_fee(self, instrument: str, side: str) -> float:
+        if self.profile == "generic":
+            return 0.0
+        if instrument == "cash":
+            fee = self.brokerage_flat_cash * (1.0 + self.gst_rate)
+            return fee + (self.dp_charge_cash_sell if side == "sell" else 0.0)
+        return self.brokerage_flat_futures * (1.0 + self.gst_rate)
+
+    def leg_cost(self, traded_notional: float, instrument: str, side: str) -> float:
+        """Cost of one leg trade (zero for no trade)."""
+        if traded_notional == 0:
+            return 0.0
+        return abs(traded_notional) * self.rate_bps(instrument, side) / 1e4 + self.flat_fee(instrument, side)
+
+    def roll_cost(self, futures_notional: float) -> float:
+        """Close the expiring contract and open the next one on the same notional."""
+        if futures_notional == 0:
+            return 0.0
+        rate = self.rate_bps("futures", "buy") + self.rate_bps("futures", "sell") + self.futures_roll_spread_bps
+        return abs(futures_notional) * rate / 1e4 + self.flat_fee("futures", "buy") + self.flat_fee("futures", "sell")
+
+    def borrow_cost(self, short_cash_notional: float) -> float:
+        """Borrow fee for one day on a cash short (futures shorts pay none)."""
+        return abs(short_cash_notional) * self.borrow_bps_annual / 1e4 / self.periods_per_year
+
+
+def lot_scale(units: float, lot_size: float | None) -> float | None:
+    """Factor (<= 1) that rounds ``units`` toward zero to whole lots; ``None`` if not even one lot fits."""
+    if lot_size is None or units == 0:
+        return 1.0
+    lots = np.floor(abs(units) / lot_size)
+    if lots < 1:
+        return None
+    return float(lots * lot_size / abs(units))
+
+
+__all__ = ["CostModel", "MarketCostModel", "lot_scale", "target_leg_weights"]

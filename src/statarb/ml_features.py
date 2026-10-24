@@ -28,6 +28,14 @@ A label at ``t`` uses ``z_{t+H}``. A row may be used to fit or evaluate a model 
 window ``[start, end)`` only if ``t + H <= end - 1 - embargo``, so that no label reaches
 into the following window. This stops validation or test prices from leaking into training
 labels, and stops test prices from leaking into validation scores.
+
+Point-in-time training rows
+---------------------------
+By default (``ml.training_features: in_sample``) training rows use the spread parameters fitted on
+the whole fitting window, so a training bar's z-score depends on prices after it, while every
+prediction uses parameters frozen before the bar. :func:`point_in_time_rows` removes that mismatch:
+each block of bars gets parameters estimated only on the bars before the block, and both its
+features and its labels are computed with them.
 """
 
 from __future__ import annotations
@@ -37,7 +45,8 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from .spread import SpreadModel
+from .hedge_ratio import estimate_hedge_ratio
+from .spread import SpreadModel, fit_spread_model
 
 FEATURE_DESCRIPTIONS: dict[str, str] = {
     "z": "Current spread z-score (training mean and std).",
@@ -195,14 +204,97 @@ def build_dataset(prices: pd.DataFrame, model: SpreadModel, spec: FeatureSpec, f
     return MLDataset(features, reversion_target(z, horizon, tolerance), eligible(z, min_abs_z), spec, horizon, tolerance)
 
 
+@dataclass
+class PointInTimeRows:
+    """Training rows whose features and labels use spread parameters estimated strictly before them."""
+
+    features: pd.DataFrame
+    target: pd.Series
+    positions: np.ndarray  # integer positions in the price frame that was passed in
+    blocks: pd.DataFrame   # per block: dates, estimation window, frozen parameters, rows kept
+    horizon: int
+
+    def __len__(self) -> int:
+        return len(self.target)
+
+    def purged(self, end: int, embargo: int = 0) -> np.ndarray:
+        """Rows whose label horizon ends at least ``embargo`` bars before position ``end``."""
+        return self.positions + self.horizon <= end - 1 - embargo
+
+    def xy(self, mask: np.ndarray | None = None) -> tuple[pd.DataFrame, pd.Series]:
+        if mask is None:
+            return self.features, self.target.astype(int)
+        return self.features.loc[mask], self.target.loc[mask].astype(int)
+
+
+def _day(value) -> str:
+    return str(value.date()) if hasattr(value, "date") else str(value)
+
+
+def point_in_time_rows(prices: pd.DataFrame, fit_start: int, fit_end: int, config, spec: FeatureSpec,
+                       history_start: int = 0, embargo: int = 0) -> PointInTimeRows:
+    """Point-in-time training rows on ``[fit_start, fit_end)`` (``ml.training_features: point_in_time``).
+
+    The window is cut into blocks of ``ml.pit_block`` bars. For a block starting at bar ``b`` the hedge
+    ratio and spread mean / std are estimated on the ``L`` bars ``[b - L, b)`` only
+    (``L = ml.pit_estimation_window``, default ``walk_forward.train_window``), with the same estimator as
+    the deployed model; the block's features *and* labels are computed with those frozen parameters. A
+    training row is therefore built exactly like a live prediction. Blocks need ``L`` bars of history
+    at or after ``history_start``, so the first ``L`` bars after it yield no rows. No price at or after
+    ``fit_end`` is read, and rows are purged so that ``t + H <= fit_end - 1 - embargo``.
+    """
+    ml = config.ml
+    L = ml.pit_estimation_window or config.walk_forward.train_window
+    H = ml.horizon
+    if not 0 <= history_start <= fit_start < fit_end <= len(prices):
+        raise ValueError("point_in_time_rows needs 0 <= history_start <= fit_start < fit_end <= len(prices)")
+    logp = np.log(prices[["A", "B"]])
+    last = fit_end - H - embargo  # rows t < last keep their label inside the window
+    frames, targets, positions, blocks = [], [], [], []
+    for b0 in range(max(fit_start, history_start + L), min(fit_end, last), ml.pit_block):
+        b1 = min(b0 + ml.pit_block, fit_end)
+        est = logp.iloc[b0 - L:b0]
+        record = {"block_start": _day(prices.index[b0]), "block_end": _day(prices.index[b1 - 1]),
+                  "estimation_start": _day(est.index[0]), "estimation_end": _day(est.index[-1])}
+        try:
+            hedge = estimate_hedge_ratio(est["A"], est["B"], method=config.hedge_ratio.method)
+            model = fit_spread_model(est["A"], est["B"], min_std=config.spread.min_std, hedge=hedge)
+            features = build_features(prices.iloc[b0 - L:min(b1 + H, fit_end)], model, spec,
+                                      training_spread_change_std(est, model))
+        except ValueError as exc:
+            blocks.append({**record, "eligible_bars": 0, "rows": 0, "note": str(exc)})
+            continue
+        z = features["z"]
+        target = reversion_target(z, H, ml.tolerance_z)
+        pos = np.arange(len(features)) + (b0 - L)
+        in_block = (pos >= b0) & (pos < b1)
+        elig = eligible(z, ml.min_abs_z).to_numpy(dtype=bool) & in_block
+        keep = elig & (target.notna() & features.notna().all(axis=1)).to_numpy(dtype=bool) & (pos < last)
+        frames.append(features.loc[keep])
+        targets.append(target.loc[keep])
+        positions.append(pos[keep])
+        blocks.append({**record, "hedge_ratio": model.hedge_ratio, "intercept": model.intercept,
+                       "spread_mean": model.mean, "spread_std": model.std, "eligible_bars": int(elig.sum()),
+                       "rows": int(keep.sum()),
+                       "positive_rate": float(target.loc[keep].mean()) if keep.any() else np.nan, "note": ""})
+    if frames:
+        X, y, pos = pd.concat(frames), pd.concat(targets), np.concatenate(positions)
+    else:
+        X = pd.DataFrame(columns=spec.columns, dtype=float)
+        y, pos = pd.Series(dtype=float, name="target"), np.array([], dtype=int)
+    return PointInTimeRows(X, y, pos.astype(int), pd.DataFrame(blocks), H)
+
+
 __all__ = [
     "FEATURE_DESCRIPTIONS",
     "FeatureSpec",
     "MLDataset",
+    "PointInTimeRows",
     "build_dataset",
     "build_features",
     "consecutive_true",
     "eligible",
+    "point_in_time_rows",
     "purged_window_mask",
     "reversion_target",
     "training_spread_change_std",

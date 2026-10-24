@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
 from typing import Any
 
@@ -88,12 +88,21 @@ class SplitConfig:
             raise ValueError(f"split proportions must sum to 1.0, got {total:.6f}")
 
 
+JOHANSEN_LEVELS = (0.10, 0.05, 0.01)  # statsmodels provides 90/95/99% critical values
+
+
 @dataclass(frozen=True)
 class CointegrationConfig:
     significance: float = 0.05
     trend: str = "c"
     autolag: str | None = "AIC"
     min_observations: int = 100
+    # Trading gate: eg (baseline: Engle-Granger, A on B) | eg_both (EG must pass in both directions)
+    # | johansen (Johansen trace test, r = 0 rejected) | eg_and_johansen.
+    gate: str = "eg"
+    record_all_tests: bool = False   # also record reverse EG and Johansen for every fitting window
+    johansen_det_order: int = 0      # -1 none, 0 constant, 1 linear trend
+    johansen_k_ar_diff: int = 1
 
     def __post_init__(self) -> None:
         if not 0.0 < self.significance < 0.5:
@@ -104,6 +113,16 @@ class CointegrationConfig:
             raise ValueError("cointegration.autolag must be AIC, BIC, t-stat or null")
         if self.min_observations < 30:
             raise ValueError("cointegration.min_observations must be at least 30")
+        if self.gate not in {"eg", "eg_both", "johansen", "eg_and_johansen"}:
+            raise ValueError("cointegration.gate must be eg, eg_both, johansen or eg_and_johansen")
+        uses_johansen = self.gate in {"johansen", "eg_and_johansen"} or self.record_all_tests
+        if uses_johansen and not any(abs(self.significance - lv) < 1e-12 for lv in JOHANSEN_LEVELS):
+            raise ValueError("Johansen critical values exist only at the 10%, 5% and 1% levels; "
+                             "set cointegration.significance to 0.10, 0.05 or 0.01")
+        if self.johansen_det_order not in {-1, 0, 1}:
+            raise ValueError("cointegration.johansen_det_order must be -1, 0 or 1")
+        if self.johansen_k_ar_diff < 1:
+            raise ValueError("cointegration.johansen_k_ar_diff must be at least 1")
 
 
 @dataclass(frozen=True)
@@ -131,6 +150,8 @@ class StrategyConfig:
     stop_loss_z: float | None = None
     max_holding_days: int | None = None
     execution_lag: int = 1
+    max_holding_half_lives: float | None = None  # time stop at k x the fitting window's AR(1) half-life
+    execution_price: str = "close"                # close (baseline: close of t+lag) | open (open of t+lag)
 
     def __post_init__(self) -> None:
         if self.entry_z <= 0:
@@ -146,6 +167,10 @@ class StrategyConfig:
                 "strategy.execution_lag must be >= 1: a signal computed from the close of day t "
                 "cannot be traded at that same close without look-ahead bias"
             )
+        if self.max_holding_half_lives is not None and self.max_holding_half_lives <= 0:
+            raise ValueError("strategy.max_holding_half_lives must be positive when enabled")
+        if self.execution_price not in {"close", "open"}:
+            raise ValueError("strategy.execution_price must be close or open")
 
 
 @dataclass(frozen=True)
@@ -154,6 +179,10 @@ class PortfolioConfig:
     max_gross_exposure: float = 1.0
     rebalance_tolerance: float | None = 0.10
     close_at_period_end: bool = True
+    # Credit the risk-free rate (metrics.risk_free_by_year if set, else metrics.risk_free_rate) on the cash
+    # balance (equity - long notional + short notional): idle capital, short-sale proceeds, and the
+    # cost-of-carry earned by short futures. Off in the baseline.
+    cash_interest: bool = False
 
     def __post_init__(self) -> None:
         if self.initial_capital <= 0:
@@ -170,11 +199,55 @@ class CostConfig:
     slippage_bps: float = 5.0
     borrow_bps_annual: float = 50.0
     short_selling_allowed: bool = True
+    # Market cost profile: generic (baseline: commission + slippage per side) | nse (statutory schedule below).
+    profile: str = "generic"
+    # Instrument for short legs: cash (baseline: borrow fee) | futures (single-stock futures: no borrow
+    # fee, periodic roll costs, margin reported; the cost-of-carry credit comes from portfolio.cash_interest).
+    short_instrument: str = "cash"
+    # NSE schedule in basis points of traded notional (as known to the researcher for late 2024; verify
+    # against current NSE/SEBI circulars and your broker's contract notes before relying on it).
+    stt_delivery_bps: float = 10.0          # securities transaction tax, delivery, on buys and sells
+    stt_futures_sell_bps: float = 2.0       # STT on futures, sell side only
+    exchange_cash_bps: float = 0.297        # NSE transaction charge, cash market
+    exchange_futures_bps: float = 0.173     # NSE transaction charge, equity futures
+    sebi_fee_bps: float = 0.01              # SEBI turnover fee (Rs 10 per crore)
+    stamp_delivery_buy_bps: float = 1.5     # stamp duty on delivery buys
+    stamp_futures_buy_bps: float = 0.2      # stamp duty on futures buys
+    gst_rate: float = 0.18                  # GST on brokerage + exchange + SEBI charges
+    brokerage_bps: float = 0.0
+    brokerage_flat_cash: float = 0.0        # currency per cash order (per leg per trade), before GST
+    brokerage_flat_futures: float = 0.0     # currency per futures order (per leg per trade), before GST
+    dp_charge_cash_sell: float = 0.0        # depository charge per cash sell (all-in)
+    futures_roll_every_bars: int = 21       # roll a held futures leg after this many bars
+    futures_roll_spread_bps: float = 2.0    # extra slippage per roll (calendar spread), on rolled notional
+    futures_margin_rate: float = 0.2        # initial margin as a share of futures notional (reported)
+    futures_lot_sizes: tuple[tuple[str, float], ...] = ()  # ticker -> lot size; units rounded down to lots
 
     def __post_init__(self) -> None:
         for name in ("commission_bps", "slippage_bps", "borrow_bps_annual"):
             if getattr(self, name) < 0:
                 raise ValueError(f"costs.{name} must be non-negative")
+        if self.profile not in {"generic", "nse"}:
+            raise ValueError("costs.profile must be generic or nse")
+        if self.short_instrument not in {"cash", "futures"}:
+            raise ValueError("costs.short_instrument must be cash or futures")
+        for name in ("stt_delivery_bps", "stt_futures_sell_bps", "exchange_cash_bps", "exchange_futures_bps",
+                     "sebi_fee_bps", "stamp_delivery_buy_bps", "stamp_futures_buy_bps", "gst_rate", "brokerage_bps",
+                     "brokerage_flat_cash", "brokerage_flat_futures", "dp_charge_cash_sell", "futures_roll_spread_bps",
+                     "futures_margin_rate"):
+            if getattr(self, name) < 0:
+                raise ValueError(f"costs.{name} must be non-negative")
+        if self.futures_roll_every_bars < 1:
+            raise ValueError("costs.futures_roll_every_bars must be at least 1")
+        lots = self.futures_lot_sizes
+        items = lots.items() if isinstance(lots, dict) else lots
+        lots = tuple((str(k), float(v)) for k, v in items)
+        if any(v <= 0 for _, v in lots):
+            raise ValueError("costs.futures_lot_sizes must be positive")
+        object.__setattr__(self, "futures_lot_sizes", lots)
+
+    def lot_size(self, ticker: str) -> float | None:
+        return dict(self.futures_lot_sizes).get(ticker)
 
 
 @dataclass(frozen=True)
@@ -182,14 +255,30 @@ class MetricsConfig:
     periods_per_year: int = 252
     risk_free_rate: float = 0.0
     min_years_for_cagr: float = 1.0
+    # Optional calendar-year schedule {year: annual rate}; when set it replaces risk_free_rate for Sharpe,
+    # Sortino, the cash benchmark and cash interest. Years outside it take the nearest scheduled year's rate.
+    risk_free_by_year: tuple[tuple[int, float], ...] = ()
 
     def __post_init__(self) -> None:
         if self.periods_per_year <= 0:
             raise ValueError("metrics.periods_per_year must be positive")
         if not -0.05 <= self.risk_free_rate <= 0.5:
             raise ValueError("metrics.risk_free_rate must be an annual decimal rate, e.g. 0.03")
+        items = self.risk_free_by_year
+        items = items.items() if isinstance(items, dict) else items
+        schedule = tuple(sorted((int(y), float(r)) for y, r in items))
+        if any(not -0.05 <= r <= 0.5 for _, r in schedule):
+            raise ValueError("metrics.risk_free_by_year rates must be annual decimal rates, e.g. 0.03")
+        if len({y for y, _ in schedule}) != len(schedule):
+            raise ValueError("metrics.risk_free_by_year lists a year twice")
+        object.__setattr__(self, "risk_free_by_year", schedule)
         if self.min_years_for_cagr < 0:
             raise ValueError("metrics.min_years_for_cagr must be non-negative")
+
+    @property
+    def risk_free(self) -> float | dict[int, float]:
+        """Risk-free argument for the metrics functions: the year schedule if set, else the constant."""
+        return dict(self.risk_free_by_year) if self.risk_free_by_year else self.risk_free_rate
 
 
 @dataclass(frozen=True)
@@ -197,6 +286,8 @@ class EvaluationConfig:
     test_parameter_source: str = "config"
     selection_metric: str = "sharpe"
     min_trades_for_selection: int = 3
+    static_require_cointegration: bool = False  # static workflow: no trading in periods whose model fails the gate
+    static_refit_before_test: bool = False      # static workflow: refit the spread model on train + validation
 
     def __post_init__(self) -> None:
         if self.test_parameter_source not in {"config", "validation_selected"}:
@@ -295,6 +386,11 @@ class MLConfig:
     threshold_mode: str = "absolute"         # absolute (probability_threshold) | prevalence (fit-window base rate)
     prevalence_multiplier: float = 1.0
     include_prevalence_baseline: bool = False  # adds diagnostic variant B0 (B rules, constant prevalence forecast)
+    # Training rows: in_sample (baseline: spread parameters from the whole fitting window) | point_in_time
+    # (each block of pit_block bars uses parameters estimated only on the pit_estimation_window bars before it).
+    training_features: str = "in_sample"
+    pit_estimation_window: int | None = None   # None -> walk_forward.train_window
+    pit_block: int = 21
 
     def __post_init__(self) -> None:
         for name in ("z_lags", "return_windows", "rf_min_samples_leaf_grid"):
@@ -345,6 +441,12 @@ class MLConfig:
             raise ValueError("ml.threshold_mode must be absolute or prevalence")
         if self.prevalence_multiplier <= 0:
             raise ValueError("ml.prevalence_multiplier must be positive")
+        if self.training_features not in {"in_sample", "point_in_time"}:
+            raise ValueError("ml.training_features must be in_sample or point_in_time")
+        if self.pit_estimation_window is not None and self.pit_estimation_window < 60:
+            raise ValueError("ml.pit_estimation_window must be at least 60 bars (or null)")
+        if self.pit_block < 1:
+            raise ValueError("ml.pit_block must be at least 1")
         if (self.walk_forward_tuning == "nested" and self.threshold_source == "validation_selected"
                 and self.threshold_mode == "absolute"):
             raise ValueError("ml.walk_forward_tuning: nested cannot reuse validation-selected thresholds (that would "
@@ -360,6 +462,7 @@ class HoldoutConfig:
     development_end: str | None = None
     holdout_start: str | None = None
     holdout_end: str | None = None
+    protocol_dir: str = "docs/research"   # pre-registration, freeze record and holdout marker for this study
 
     def __post_init__(self) -> None:
         for name in ("development_end", "holdout_start", "holdout_end"):
@@ -430,11 +533,15 @@ class ResearchConfig:
     ml: MLConfig = field(default_factory=MLConfig)
     holdout: HoldoutConfig = field(default_factory=HoldoutConfig)
     inference: InferenceConfig = field(default_factory=InferenceConfig)
+    # Per-market overrides keyed by exchange (ticker suffix, e.g. NS; tickers without a suffix are US),
+    # each a {section: {key: value}} mapping applied by for_pair(). Empty in the baseline.
+    markets: dict[str, dict[str, dict[str, Any]]] = field(default_factory=dict, hash=False)
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any] | None) -> "ResearchConfig":
         """Build a validated config from a nested dictionary (missing keys use defaults)."""
-        raw = raw or {}
+        raw = dict(raw or {})
+        markets = raw.pop("markets", None) or {}
         unknown_sections = set(raw) - set(_SECTIONS)
         if unknown_sections:
             raise ValueError(f"Unknown configuration sections: {sorted(unknown_sections)}")
@@ -446,7 +553,26 @@ class ResearchConfig:
             if unknown:
                 raise ValueError(f"Unknown keys in '{name}': {sorted(unknown)}")
             sections[name] = section_cls(**values)
-        return cls(**sections)
+        config = cls(**sections, markets=_normalise_markets(markets))
+        for key in config.markets:  # validate every market override eagerly (typos fail at load time)
+            config.for_market(key)
+        return config
+
+    def for_market(self, market: str) -> "ResearchConfig":
+        """This config with the overrides of one market (e.g. ``NS`` or ``US``) applied."""
+        overrides = self.markets.get(market_key(market) if "." in market else market.upper())
+        if not overrides:
+            return self
+        merged = self.to_dict()
+        for section, values in overrides.items():
+            merged[section] = {**merged[section], **values}
+        merged["markets"] = {}
+        out = ResearchConfig.from_dict(merged)
+        return replace(out, markets=self.markets)
+
+    def for_pair(self, ticker_a: str, ticker_b: str) -> "ResearchConfig":
+        """Apply the market overrides of the pair's exchange (taken from leg A when the legs differ)."""
+        return self.for_market(market_key(ticker_a)) if self.markets else self
 
     def to_dict(self) -> dict[str, Any]:
         """Plain nested dictionary (tuples converted to lists) suitable for YAML/JSON."""
@@ -458,13 +584,32 @@ class ResearchConfig:
         for section, values in overrides.items():
             if section not in merged:
                 raise ValueError(f"Unknown configuration section: {section!r}")
-            merged[section] = {**merged[section], **values}
+            merged[section] = {**merged[section], **values} if section != "markets" else dict(values)
         return ResearchConfig.from_dict(merged)
 
     def fingerprint(self) -> str:
         """Short, stable hash of the configuration used to label research runs."""
         payload = json.dumps(self.to_dict(), sort_keys=True, default=str).encode("utf-8")
         return hashlib.sha256(payload).hexdigest()[:12]
+
+
+def market_key(ticker: str) -> str:
+    """Exchange of a Yahoo-style ticker: the suffix after the last dot (``TCS.NS`` -> ``NS``), else ``US``."""
+    return ticker.rsplit(".", 1)[1].upper() if "." in ticker else "US"
+
+
+def _normalise_markets(markets: dict) -> dict[str, dict[str, dict[str, Any]]]:
+    if not isinstance(markets, dict):
+        raise ValueError("markets must be a mapping of exchange -> {section: {key: value}}")
+    out: dict[str, dict[str, dict[str, Any]]] = {}
+    for key, sections in markets.items():
+        if not isinstance(sections, dict) or any(not isinstance(v, dict) for v in sections.values()):
+            raise ValueError(f"markets.{key} must map section names to {{key: value}} overrides")
+        unknown = set(sections) - set(_SECTIONS)
+        if unknown:
+            raise ValueError(f"Unknown sections in markets.{key}: {sorted(unknown)}")
+        out[str(key).upper().lstrip(".")] = {s: dict(v) for s, v in sections.items()}
+    return out
 
 
 def _to_builtin(value: Any) -> Any:
@@ -524,6 +669,7 @@ __all__ = [
     "SyntheticConfig",
     "WalkForwardConfig",
     "load_config",
+    "market_key",
     "resolve_path",
     "save_config_snapshot",
 ]

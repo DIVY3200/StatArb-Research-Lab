@@ -5,6 +5,8 @@ Conventions
 * Daily simple returns; ``periods_per_year`` (default 252) is used for annualisation.
 * The annual risk-free rate is converted to a daily geometric rate
   ``(1 + rf) ** (1 / periods_per_year) - 1`` and subtracted before computing the Sharpe ratio.
+  It is either a constant or a calendar-year schedule ``{year: annual rate}``: each bar then uses
+  the rate of the latest scheduled year at or before its own (the first rate before the schedule).
 * Metrics that are undefined for the sample (too few observations, zero volatility, no
   drawdown, no completed trades, or a period shorter than ``min_years`` for CAGR) are
   returned as ``NaN`` rather than misleading infinities.
@@ -18,14 +20,63 @@ Conventions
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import numpy as np
 import pandas as pd
 
 _EPS = 1e-12
+RiskFree = float | Mapping  # annual rate, or {calendar year: annual rate}
 
 
 def daily_risk_free(rf_annual: float, periods_per_year: int = 252) -> float:
     return (1.0 + rf_annual) ** (1.0 / periods_per_year) - 1.0
+
+
+def annual_rate_for_year(schedule: Mapping, year: int) -> float:
+    """Rate of the latest scheduled year at or before ``year`` (the first rate for years before the schedule)."""
+    items = sorted((int(y), float(r)) for y, r in schedule.items())
+    if not items:
+        raise ValueError("risk-free schedule is empty")
+    rate = items[0][1]
+    for y, r in items:
+        if y > int(year):
+            break
+        rate = r
+    return rate
+
+
+def daily_risk_free_series(rf_annual: RiskFree, index: pd.Index, periods_per_year: int = 252) -> pd.Series:
+    """Daily risk-free rate for every bar of ``index`` (a constant, or each bar's calendar-year rate)."""
+    if not isinstance(rf_annual, Mapping):
+        return pd.Series(daily_risk_free(float(rf_annual), periods_per_year), index=index)
+    if not isinstance(index, pd.DatetimeIndex):
+        raise ValueError("a calendar-year risk-free schedule needs dated returns (DatetimeIndex)")
+    rates = {y: daily_risk_free(annual_rate_for_year(rf_annual, y), periods_per_year) for y in set(index.year)}
+    return pd.Series([rates[y] for y in index.year], index=index, dtype=float)
+
+
+def _excess(r: pd.Series, rf_annual: RiskFree, periods_per_year: int) -> pd.Series:
+    if isinstance(rf_annual, Mapping):
+        return r - daily_risk_free_series(rf_annual, r.index, periods_per_year).to_numpy()
+    return r - daily_risk_free(rf_annual, periods_per_year)
+
+
+def period_excess_returns(returns: pd.Series, rf_annual: RiskFree = 0.0, periods_per_year: int = 252) -> pd.Series:
+    """Excess returns of a backtest or benchmark series of this project.
+
+    Such a series starts with a placeholder 0 (positions are established at the first close, so no
+    holding period precedes it); no risk-free rate is subtracted from that first value. Everything
+    else is ``returns - daily risk-free rate`` of each bar.
+    """
+    r = _clean(returns)
+    if isinstance(rf_annual, Mapping):
+        rf = daily_risk_free_series(rf_annual, r.index, periods_per_year).to_numpy().copy()
+    else:
+        rf = np.full(len(r), daily_risk_free(rf_annual, periods_per_year))
+    if len(rf):
+        rf[0] = 0.0
+    return r - rf
 
 
 def _clean(returns: pd.Series) -> pd.Series:
@@ -57,18 +108,18 @@ def annualized_volatility(returns: pd.Series, periods_per_year: int = 252) -> fl
     return float(r.std(ddof=1) * np.sqrt(periods_per_year))
 
 
-def sharpe_ratio(returns: pd.Series, rf_annual: float = 0.0, periods_per_year: int = 252) -> float:
+def sharpe_ratio(returns: pd.Series, rf_annual: RiskFree = 0.0, periods_per_year: int = 252) -> float:
     r = _clean(returns)
     if len(r) < 2:
         return float("nan")
-    excess = r - daily_risk_free(rf_annual, periods_per_year)
+    excess = _excess(r, rf_annual, periods_per_year)
     sd = float(excess.std(ddof=1))
     if not np.isfinite(sd) or sd < _EPS:
         return float("nan")
     return float(excess.mean() / sd * np.sqrt(periods_per_year))
 
 
-def sortino_ratio(returns: pd.Series, rf_annual: float = 0.0, periods_per_year: int = 252) -> float:
+def sortino_ratio(returns: pd.Series, rf_annual: RiskFree = 0.0, periods_per_year: int = 252) -> float:
     """Annualised mean excess return over downside deviation (target = risk-free rate).
 
     Downside deviation is ``sqrt(mean(min(excess, 0) ** 2))`` over *all* observations. NaN when
@@ -77,7 +128,7 @@ def sortino_ratio(returns: pd.Series, rf_annual: float = 0.0, periods_per_year: 
     r = _clean(returns)
     if len(r) < 2:
         return float("nan")
-    excess = r - daily_risk_free(rf_annual, periods_per_year)
+    excess = _excess(r, rf_annual, periods_per_year)
     downside = float(np.sqrt(np.mean(np.minimum(excess.to_numpy(), 0.0) ** 2)))
     if not np.isfinite(downside) or downside < _EPS:
         return float("nan")
@@ -118,9 +169,18 @@ def calmar_ratio(returns: pd.Series, periods_per_year: int = 252, min_years: flo
 
 
 def return_metrics(
-    returns: pd.Series, rf_annual: float = 0.0, periods_per_year: int = 252, min_years: float = 1.0
+    returns: pd.Series, rf_annual: RiskFree = 0.0, periods_per_year: int = 252, min_years: float = 1.0,
+    starts_flat: bool = False,
 ) -> dict[str, float]:
+    """Return metrics of a daily series. ``starts_flat``: the series is a backtest or benchmark whose first value
+    is the starting placeholder, so Sharpe and Sortino use :func:`period_excess_returns`."""
     r = _clean(returns)
+    if starts_flat and (isinstance(rf_annual, Mapping) or rf_annual):
+        out = return_metrics(r, 0.0, periods_per_year, min_years)
+        excess = period_excess_returns(r, rf_annual, periods_per_year)
+        out["sharpe_ratio"] = sharpe_ratio(excess, 0.0, periods_per_year)
+        out["sortino_ratio"] = sortino_ratio(excess, 0.0, periods_per_year)
+        return out
     return {
         "observations": int(len(r)),
         "cumulative_return": cumulative_return(r),
@@ -178,10 +238,10 @@ def exposure_statistics(daily: pd.DataFrame, initial_capital: float, periods_per
     }
 
 
-def strategy_metrics(result, rf_annual: float = 0.0, periods_per_year: int = 252, min_years: float = 1.0) -> dict[str, float]:
+def strategy_metrics(result, rf_annual: RiskFree = 0.0, periods_per_year: int = 252, min_years: float = 1.0) -> dict[str, float]:
     """All headline metrics for a :class:`~statarb.backtester.BacktestResult`."""
-    net = return_metrics(result.returns, rf_annual, periods_per_year, min_years)
-    gross = return_metrics(result.gross_returns, rf_annual, periods_per_year, min_years)
+    net = return_metrics(result.returns, rf_annual, periods_per_year, min_years, starts_flat=True)
+    gross = return_metrics(result.gross_returns, rf_annual, periods_per_year, min_years, starts_flat=True)
     metrics: dict[str, float] = dict(net)
     metrics.update({f"gross_{k}": v for k, v in gross.items() if k != "observations"})
     metrics["final_equity"] = float(result.equity.iloc[-1])
@@ -191,7 +251,7 @@ def strategy_metrics(result, rf_annual: float = 0.0, periods_per_year: int = 252
 
 
 def benchmark_returns(prices: pd.DataFrame, names: dict[str, str] | None = None,
-                      rf_annual: float = 0.0, periods_per_year: int = 252) -> pd.DataFrame:
+                      rf_annual: RiskFree = 0.0, periods_per_year: int = 252) -> pd.DataFrame:
     """Daily returns of passive benchmarks on the same dates as ``prices``.
 
     Columns: buy-and-hold A, buy-and-hold B, a 50/50 buy-and-hold portfolio of the two
@@ -202,8 +262,7 @@ def benchmark_returns(prices: pd.DataFrame, names: dict[str, str] | None = None,
     rets = (prices / prices.shift(1) - 1.0).fillna(0.0)
     growth = prices / prices.iloc[0]
     half_half = 0.5 * growth["A"] + 0.5 * growth["B"]
-    rf_d = daily_risk_free(rf_annual, periods_per_year)
-    cash = pd.Series(rf_d, index=prices.index)
+    cash = daily_risk_free_series(rf_annual, prices.index, periods_per_year)
     cash.iloc[0] = 0.0
     return pd.DataFrame(
         {
@@ -220,14 +279,15 @@ def comparison_table(
     strategy_net: pd.Series,
     strategy_gross: pd.Series,
     benchmarks: pd.DataFrame,
-    rf_annual: float = 0.0,
+    rf_annual: RiskFree = 0.0,
     periods_per_year: int = 252,
     min_years: float = 1.0,
 ) -> pd.DataFrame:
     """Side-by-side return metrics for the strategy (net and gross) and benchmarks."""
     columns = {"Pairs strategy (net)": strategy_net, "Pairs strategy (gross, before costs)": strategy_gross}
     columns.update({col: benchmarks[col] for col in benchmarks.columns})
-    table = {name: return_metrics(series, rf_annual, periods_per_year, min_years) for name, series in columns.items()}
+    table = {name: return_metrics(series, rf_annual, periods_per_year, min_years, starts_flat=True)
+             for name, series in columns.items()}
     return pd.DataFrame(table)
 
 
@@ -238,7 +298,10 @@ __all__ = [
     "calmar_ratio",
     "comparison_table",
     "cumulative_return",
+    "annual_rate_for_year",
     "daily_risk_free",
+    "daily_risk_free_series",
+    "period_excess_returns",
     "drawdown_series",
     "equity_curve",
     "exposure_statistics",

@@ -26,8 +26,9 @@ import yaml  # noqa: E402
 
 from statarb import diagnostics as dx  # noqa: E402
 from statarb import visualization as viz  # noqa: E402
-from statarb.cointegration import ASSUMPTIONS, LIMITATIONS  # noqa: E402
-from statarb.config import ResearchConfig, load_config, resolve_path  # noqa: E402
+from statarb.backtester import BacktestConfig  # noqa: E402
+from statarb.cointegration import ASSUMPTIONS, GATES, LIMITATIONS  # noqa: E402
+from statarb.config import ResearchConfig, load_config, market_key, resolve_path  # noqa: E402
 from statarb.data_loader import AssetData, DataLoadError, download_yfinance, generate_synthetic_pair, load_csv  # noqa: E402
 from statarb.data_validation import AlignedPair, prepare_pair_from_config, truncate_list, validate_price_frame  # noqa: E402
 from statarb.evaluation import (  # noqa: E402
@@ -36,6 +37,7 @@ from statarb.evaluation import (  # noqa: E402
     result_tables,
     run_pair_research,
     save_research_run,
+    static_tradable,
     statistical_tests_payload,
 )
 from statarb.ml_evaluation import (  # noqa: E402
@@ -58,6 +60,16 @@ V2_ML_KEYS = ("walk_forward_tuning", "inner_validation_fraction", "class_weight"
               "prevalence_multiplier", "tuning_metric", "include_prevalence_baseline")
 V2_DATA_KEYS = ("special_sessions", "special_session_dates", "special_session_dates_by_exchange",
                 "special_session_volume_ratio")
+V3 = load_config(ROOT / "config" / "research_v3.yaml")  # v2 plus the realism and robustness options
+V3_ML_KEYS = V2_ML_KEYS + ("pit_block",)
+PROTOCOLS = {"baseline": "Baseline (as originally built)", "v2": "v2 audited (config/research_v2.yaml)",
+             "v3": "v3 realistic (config/research_v3.yaml)"}
+GATE_LABELS = {"eg": "Engle-Granger (A on B)", "eg_both": "Engle-Granger in both directions",
+               "johansen": "Johansen trace test", "eg_and_johansen": "Engle-Granger and Johansen"}
+FILL_LABELS = {"close": "Close of t + lag", "open": "Open of t + lag"}
+COST_LABELS = {"generic": "Generic", "nse": "NSE statutory"}
+SHORT_LEG_LABELS = {"cash": "Cash short (borrow fee)", "futures": "Single-stock futures"}
+TRAINING_LABELS = {"in_sample": "In-sample parameters (baseline)", "point_in_time": "Point in time (block-wise)"}
 SOURCES = {"synthetic": "Synthetic demo (offline)", "yfinance": "Yahoo Finance (yfinance)", "csv": "CSV upload"}
 PCT_KEYS = ("return", "drawdown", "volatility", "cagr", "win_rate", "pct", "leverage")
 COUNT_KEYS = ("observations", "trades", "rebalances", "rows")
@@ -196,48 +208,103 @@ def sidebar() -> dict:
         sb.caption("Synthetic data is generated, clearly labelled, and never market history.")
     params["prefer_adjusted"] = sb.toggle("Prefer adjusted close", BASE.data.prefer_adjusted)
 
+    sb.header("Research protocol")
+    protocol_label = sb.radio(
+        "Protocol", list(PROTOCOLS.values()),
+        help="v2 drops special sessions (weekend-dated bars, NSE Muhurat, very thin volume), tunes ML hyperparameters "
+             "inside each walk-forward window, uses unweighted models with a prevalence threshold, and adds the "
+             "prevalence-forecast control B0. v3 adds next-open fills, NSE statutory costs with futures shorts for .NS "
+             "pairs, cash interest at calendar-year T-bill rates, a half-life time stop, the Engle-Granger + Johansen "
+             "gate and point-in-time ML training rows. See docs/audit and docs/research.")
+    protocol = next(k for k, v in PROTOCOLS.items() if v == protocol_label)
+    market = market_key(params["ticker_a"]) if source == "yfinance" and params.get("ticker_a") else None
+    preset = (V3.for_market(market) if market else V3) if protocol == "v3" else BASE
+    if protocol == "v3":
+        sb.caption("v3 defaults below are for the " + ("NSE market (`.NS` leg A)" if market == "NS" else "US / generic market")
+                   + ". Every value stays editable; the defaults follow the protocol file.")
+    nested = protocol in ("v2", "v3")
+
     sb.header("Research design")
     train = sb.slider("Training share", 0.40, 0.80, BASE.splits.train, 0.05)
     validation = sb.slider("Validation share", 0.10, 0.30, BASE.splits.validation, 0.05)
     test = round(1.0 - train - validation, 4)
     sb.caption(f"Final test share: **{test:.0%}** (remainder, chronologically last)")
-    significance = sb.select_slider("Cointegration significance level", [0.01, 0.05, 0.10], BASE.cointegration.significance)
+    significance = sb.select_slider("Cointegration significance level", [0.01, 0.05, 0.10], preset.cointegration.significance)
+    gate = sb.selectbox("Cointegration gate", list(GATES), index=list(GATES).index(preset.cointegration.gate),
+                        format_func=GATE_LABELS.get,
+                        help="Tests a fitting window must pass before it is traded. Johansen alone over-rejects with "
+                             "weakly drifting prices; requiring Engle-Granger as well keeps the size at or below EG's.")
+    static_gate = sb.toggle("Static workflow: hold flat if the training fit fails the gate",
+                            preset.evaluation.static_require_cointegration)
+    static_refit = sb.toggle("Refit on train + validation before the test period",
+                             preset.evaluation.static_refit_before_test,
+                             help="Uses every bar available when the test period starts. Training and validation results "
+                                  "are unchanged.")
 
     sb.header("Strategy")
     col1, col2 = sb.columns(2)
-    entry = col1.number_input("Entry |z|", 0.5, 5.0, BASE.strategy.entry_z, 0.25)
-    exit_ = col2.number_input("Exit |z|", 0.0, 4.5, BASE.strategy.exit_z, 0.25)
-    use_stop = sb.toggle("Stop-loss", BASE.strategy.stop_loss_z is not None)
-    stop = sb.number_input("Stop-loss |z|", 1.0, 10.0, BASE.strategy.stop_loss_z or 4.0, 0.25) if use_stop else None
-    use_hold = sb.toggle("Maximum holding period", BASE.strategy.max_holding_days is not None)
-    max_hold = int(sb.number_input("Max holding (trading days)", 1, 500, BASE.strategy.max_holding_days or 60)) if use_hold else None
-    lag = int(sb.number_input("Execution lag (bars, >= 1)", 1, 5, BASE.strategy.execution_lag,
-                              help="Signal at close t is traded at close t + lag."))
+    entry = col1.number_input("Entry |z|", 0.5, 5.0, preset.strategy.entry_z, 0.25)
+    exit_ = col2.number_input("Exit |z|", 0.0, 4.5, preset.strategy.exit_z, 0.25)
+    use_stop = sb.toggle("Stop-loss", preset.strategy.stop_loss_z is not None)
+    stop = sb.number_input("Stop-loss |z|", 1.0, 10.0, preset.strategy.stop_loss_z or 4.0, 0.25) if use_stop else None
+    use_hold = sb.toggle("Maximum holding period", preset.strategy.max_holding_days is not None)
+    max_hold = int(sb.number_input("Max holding (trading days)", 1, 500, preset.strategy.max_holding_days or 60)) if use_hold else None
+    use_hl = sb.toggle("Time stop at k x half-life", preset.strategy.max_holding_half_lives is not None,
+                       help="Exit after ceil(k x the fitting window's AR(1) half-life) bars. With a maximum holding "
+                            "period as well, the shorter one applies.")
+    hl_k = float(sb.number_input("k (half-lives)", 0.5, 20.0, float(preset.strategy.max_holding_half_lives or 3.0),
+                                 0.5)) if use_hl else None
+    lag = int(sb.number_input("Execution lag (bars, >= 1)", 1, 5, preset.strategy.execution_lag,
+                              help="Signal at the close of bar t is traded at bar t + lag."))
+    fill = sb.radio("Fill price", list(FILL_LABELS), index=list(FILL_LABELS).index(preset.strategy.execution_price),
+                    format_func=FILL_LABELS.get, horizontal=True,
+                    help="Open: the overnight gap after a signal is not earned. Needs opening prices in the data.")
 
     sb.header("Costs and portfolio")
+    profile = sb.radio("Cost model", list(COST_LABELS), index=list(COST_LABELS).index(preset.costs.profile),
+                       format_func=COST_LABELS.get, horizontal=True,
+                       help="NSE: STT, exchange, SEBI and stamp charges with GST (late-2024 schedule; verify against "
+                            "current circulars and contract notes), plus brokerage and slippage.")
     col1, col2 = sb.columns(2)
-    commission = col1.number_input("Commission (bps/leg/side)", 0.0, 100.0, BASE.costs.commission_bps, 0.5)
-    slippage = col2.number_input("Slippage (bps/leg/side)", 0.0, 100.0, BASE.costs.slippage_bps, 0.5)
-    borrow = sb.number_input("Short borrow fee (bps per year)", 0.0, 2000.0, BASE.costs.borrow_bps_annual, 5.0)
-    shorting = sb.toggle("Short selling available (assumption)", BASE.costs.short_selling_allowed)
-    capital = sb.number_input("Initial capital", 1_000.0, 1e10, BASE.portfolio.initial_capital, 10_000.0, format="%.0f")
-    gross = sb.slider("Gross exposure limit (x equity)", 0.25, 3.0, BASE.portfolio.max_gross_exposure, 0.25)
-    rf = sb.number_input("Annual risk-free rate", 0.0, 0.20, BASE.metrics.risk_free_rate, 0.005, format="%.3f")
+    commission = col1.number_input("Commission (bps/leg/side)", 0.0, 100.0, preset.costs.commission_bps, 0.5,
+                                   disabled=profile == "nse", help="Not used by the NSE schedule (see brokerage).")
+    slippage = col2.number_input("Slippage (bps/leg/side)", 0.0, 100.0, preset.costs.slippage_bps, 0.5)
+    short_leg = sb.radio("Short leg", list(SHORT_LEG_LABELS), index=list(SHORT_LEG_LABELS).index(preset.costs.short_instrument),
+                         format_func=SHORT_LEG_LABELS.get, horizontal=True,
+                         help="Most Indian investors cannot hold multi-day cash shorts; single-stock futures are the "
+                              "realistic instrument (no borrow fee, periodic rolls, margin).")
+    borrow = sb.number_input("Short borrow fee (bps per year)", 0.0, 2000.0, preset.costs.borrow_bps_annual, 5.0,
+                             disabled=short_leg == "futures", help="Charged on cash shorts only.")
+    market_costs: dict = {}
+    if profile == "nse":
+        col1, col2 = sb.columns(2)
+        market_costs["brokerage_flat_futures"] = col1.number_input("Brokerage per futures order", 0.0, 1000.0,
+                                                                   preset.costs.brokerage_flat_futures, 5.0)
+        market_costs["dp_charge_cash_sell"] = col2.number_input("DP charge per delivery sell", 0.0, 1000.0,
+                                                                preset.costs.dp_charge_cash_sell, 1.0)
+    if short_leg == "futures":
+        market_costs["futures_roll_every_bars"] = int(sb.number_input("Roll futures every (bars)", 1, 63,
+                                                                      preset.costs.futures_roll_every_bars))
+    shorting = sb.toggle("Short selling available (assumption)", preset.costs.short_selling_allowed)
+    capital = sb.number_input("Initial capital", 1_000.0, 1e10, preset.portfolio.initial_capital, 10_000.0, format="%.0f")
+    gross = sb.slider("Gross exposure limit (x equity)", 0.25, 3.0, preset.portfolio.max_gross_exposure, 0.25)
+    cash_interest = sb.toggle("Cash earns the risk-free rate", preset.portfolio.cash_interest,
+                              help="Idle capital, short-sale proceeds and the carry of short futures earn interest. Sharpe "
+                                   "ratios use excess returns, so a flat book has zero excess return.")
+    schedule = dict(preset.metrics.risk_free_by_year)
+    use_schedule = bool(schedule) and sb.toggle("Calendar-year risk-free rates (protocol)", True,
+                                                help="Approximate T-bill averages per year from the protocol file.")
+    rf = sb.number_input("Annual risk-free rate", 0.0, 0.20, preset.metrics.risk_free_rate, 0.005, format="%.3f",
+                         disabled=use_schedule)
+    if use_schedule:
+        sb.caption("Rates by year: " + ", ".join(f"{y}: {r:.2%}" for y, r in sorted(schedule.items())))
 
     sb.header("Walk-forward")
     col1, col2 = sb.columns(2)
-    wf_train = int(col1.number_input("Fit window (bars)", 120, 2520, BASE.walk_forward.train_window, 21))
-    wf_test = int(col2.number_input("Trade window (bars)", 21, 756, BASE.walk_forward.test_window, 21))
-    wf_expanding = sb.toggle("Expanding fit window", BASE.walk_forward.expanding)
-    wf_require = sb.toggle("Trade only if fit window passes EG test", BASE.walk_forward.require_cointegration)
-
-    sb.header("Research protocol")
-    protocol = sb.radio(
-        "Protocol", ["Baseline (as originally built)", "v2 audited (config/research_v2.yaml)"],
-        help="v2 drops special sessions (weekend-dated bars, NSE Muhurat, very thin volume), tunes ML hyperparameters "
-             "inside each walk-forward window, uses unweighted models with a prevalence threshold, and adds the "
-             "prevalence-forecast control B0. See docs/audit and docs/research.")
-    v2 = protocol.startswith("v2")
+    wf_train = int(col1.number_input("Fit window (bars)", 120, 2520, preset.walk_forward.train_window, 21))
+    wf_test = int(col2.number_input("Trade window (bars)", 21, 756, preset.walk_forward.test_window, 21))
+    wf_expanding = sb.toggle("Expanding fit window", preset.walk_forward.expanding)
+    wf_require = sb.toggle("Trade only if the fit window passes the gate", preset.walk_forward.require_cointegration)
 
     sb.header("Machine learning")
     ml_cfg = BASE.ml
@@ -249,13 +316,21 @@ def sidebar() -> dict:
     col1, col2 = sb.columns(2)
     min_abs_z = col1.number_input("Min |z| for ML rows", 0.0, 4.0, ml_cfg.min_abs_z, 0.25)
     prob_thr = col2.number_input("Probability threshold", 0.05, 0.95, ml_cfg.probability_threshold, 0.05,
-                                 disabled=v2, help="v2 uses the fitting rows' reversion rate instead.")
+                                 disabled=nested, help="v2 and v3 use the fitting rows' reversion rate instead.")
     embargo = int(sb.number_input("Extra embargo (bars)", 0, 60, ml_cfg.embargo,
                                   help="Dropped from the end of each fit set in addition to the H-bar purge."))
     thr_label = sb.radio("ML probability threshold source", ["Pre-specified (above)", "Validation-selected"],
-                         disabled=v2,
+                         disabled=nested,
                          help="Validation-selected picks the best validation Sharpe over the configured grid. "
                               "The test period is never used.")
+    training = sb.radio("ML training rows", list(TRAINING_LABELS),
+                        index=list(TRAINING_LABELS).index(preset.ml.training_features), format_func=TRAINING_LABELS.get,
+                        help="Point in time: each block of training rows uses spread parameters estimated only on "
+                             "earlier bars, so training rows are built exactly like live predictions.")
+    pit_window = preset.ml.pit_estimation_window
+    if training == "point_in_time":
+        pit_window = int(sb.number_input("Point-in-time estimation window (bars)", 60, 2520,
+                                         int(pit_window or preset.walk_forward.train_window), 21))
 
     sb.header("Final test period")
     source_label = sb.radio("Thresholds used on the test period",
@@ -266,29 +341,44 @@ def sidebar() -> dict:
     params["overrides"] = {
         "data": {"source": source, "prefer_adjusted": params["prefer_adjusted"]},
         "splits": {"train": train, "validation": validation, "test": test},
-        "cointegration": {"significance": significance},
+        "cointegration": {"significance": significance, "gate": gate,
+                          "record_all_tests": protocol == "v3" or gate != "eg"},
         "strategy": {"entry_z": entry, "exit_z": exit_, "stop_loss_z": stop, "max_holding_days": max_hold,
-                     "execution_lag": lag},
+                     "execution_lag": lag, "max_holding_half_lives": hl_k, "execution_price": fill},
         "costs": {"commission_bps": commission, "slippage_bps": slippage, "borrow_bps_annual": borrow,
-                  "short_selling_allowed": shorting},
-        "portfolio": {"initial_capital": capital, "max_gross_exposure": gross},
-        "metrics": {"risk_free_rate": rf},
+                  "short_selling_allowed": shorting, "profile": profile, "short_instrument": short_leg, **market_costs},
+        "portfolio": {"initial_capital": capital, "max_gross_exposure": gross, "cash_interest": cash_interest},
+        "metrics": {"risk_free_rate": rf, "risk_free_by_year": schedule if use_schedule else {}},
         "walk_forward": {"train_window": wf_train, "test_window": wf_test, "expanding": wf_expanding,
                          "require_cointegration": wf_require},
-        "evaluation": {"test_parameter_source": "config" if source_label.startswith("Pre") else "validation_selected"},
+        "evaluation": {"test_parameter_source": "config" if source_label.startswith("Pre") else "validation_selected",
+                       "static_require_cointegration": static_gate, "static_refit_before_test": static_refit},
         "ml": {"enabled": ml_on, "horizon": horizon, "tolerance_z": tolerance, "min_abs_z": min_abs_z,
                "probability_threshold": prob_thr, "embargo": embargo,
-               "threshold_source": "config" if thr_label.startswith("Pre") else "validation_selected"},
+               "threshold_source": "config" if thr_label.startswith("Pre") else "validation_selected",
+               "training_features": training, "pit_estimation_window": pit_window},
     }
-    if v2:
-        v2_ml, v2_data = V2.to_dict()["ml"], V2.to_dict()["data"]
-        params["overrides"]["ml"].update({k: v2_ml[k] for k in V2_ML_KEYS}, threshold_source="config")
-        params["overrides"]["data"].update({k: v2_data[k] for k in V2_DATA_KEYS})
+    if nested:
+        study = V2 if protocol == "v2" else V3
+        study_ml, study_data = study.to_dict()["ml"], study.to_dict()["data"]
+        keys = V2_ML_KEYS if protocol == "v2" else V3_ML_KEYS
+        params["overrides"]["ml"].update({k: study_ml[k] for k in keys}, threshold_source="config")
+        params["overrides"]["data"].update({k: study_data[k] for k in V2_DATA_KEYS})
     if source == "yfinance":
         params["overrides"]["data"].update(asset_a=params["ticker_a"], asset_b=params["ticker_b"],
                                            start_date=str(params["start"]), end_date=str(params["end"]))
     params["reveal"] = reveal
+    params["protocol"] = protocol
     return params
+
+
+def describe_rf(metrics) -> str:
+    """Plain-language description of the risk-free rate in use."""
+    if metrics.risk_free_by_year:
+        rates = dict(metrics.risk_free_by_year)
+        return (f"calendar-year rates of {min(rates.values()):.2%} to {max(rates.values()):.2%} "
+                f"({min(rates)} to {max(rates)}; later years reuse the last rate)")
+    return f"a {metrics.risk_free_rate:.2%} annual rate"
 
 
 # =========================================================================== data loading
@@ -452,6 +542,53 @@ def section_cointegration(res: PairResearchResult) -> None:
         st.markdown("**Limitations**\n" + "\n".join(f"- {a}" for a in LIMITATIONS))
         st.markdown("- The p-value is the probability of a test statistic this extreme *if there were no "
                     "cointegration*; it is not the probability that the strategy is profitable.")
+    section_cointegration_suite(res)
+
+
+def section_cointegration_suite(res: PairResearchResult) -> None:
+    suite, names, cfg = res.cointegration_suite, res.names, res.config
+    st.subheader("Is the finding robust? Both regression directions and Johansen")
+    if suite is None:
+        st.info("The reverse Engle-Granger and Johansen tests could not be computed for this training window.")
+        return
+    level = f"{1 - cfg.cointegration.significance:.0%}"
+    crit = f"{cfg.cointegration.significance:.0%}"
+    rows = []
+    for label, eg in ((f"Engle-Granger, log {names['A']} on log {names['B']}, H0: no cointegration", suite.eg_ab),
+                      (f"Engle-Granger, log {names['B']} on log {names['A']}, H0: no cointegration", suite.eg_ba)):
+        rows.append({"test": label, "statistic": f"{eg.test_statistic:.3f}",
+                     f"critical value ({crit})": f"{eg.critical_values.get(crit, float('nan')):.3f}",
+                     "p-value": fmt_p(eg.p_value), "rejects H0": "yes" if eg.reject_null else "no"})
+    j = suite.johansen
+    if j is not None:
+        for label, stat, cv, rejects in (
+            ("Johansen trace, H0: rank 0", j.trace_statistic, j.trace_critical_values[level], j.reject_r0),
+            ("Johansen max-eigenvalue, H0: rank 0", j.max_eigen_statistic, j.max_eigen_critical_values[level],
+             j.max_eigen_statistic > j.max_eigen_critical_values[level]),
+            ("Johansen trace, H0: rank <= 1", j.trace_statistic_r1, j.trace_critical_value_r1,
+             j.trace_statistic_r1 > j.trace_critical_value_r1),
+        ):
+            rows.append({"test": label, "statistic": f"{stat:.3f}", f"critical value ({crit})": f"{cv:.3f}",
+                         "p-value": "n/a", "rejects H0": "yes" if rejects else "no"})
+    else:
+        st.warning(f"Johansen test unavailable: {suite.johansen_error}")
+    st.dataframe(pd.DataFrame(rows), hide_index=True)
+    hedges = {f"EG, {names['A']} on {names['B']}": suite.eg_ab.hedge_ratio,
+              f"EG, {names['B']} on {names['A']} (inverted)": 1.0 / suite.eg_ba.hedge_ratio if suite.eg_ba.hedge_ratio else np.nan}
+    if j is not None:
+        hedges["Johansen (first vector, normalised on A)"] = j.hedge_ratio
+    st.dataframe(pd.DataFrame({"hedge ratio for log A - h log B": {k: f"{v:.4f}" for k, v in hedges.items()}}))
+    gates = pd.DataFrame({"gate": [GATE_LABELS[g] for g in GATES],
+                          "passes": ["yes" if suite.passes(g) else "no" for g in GATES],
+                          "in use": ["yes" if g == cfg.cointegration.gate else "" for g in GATES]})
+    st.dataframe(gates, hide_index=True)
+    st.caption(
+        "Engle-Granger depends on which leg is the dependent variable: the two regressions have different residuals "
+        "and can disagree. Johansen tests both series jointly and is symmetric. Rank 2 would mean both series look "
+        "stationary. In the project's simulation (scripts/johansen_size_study.py), the 5% Johansen trace test "
+        "rejected 11-12% of independent, weakly drifting random walks, and the rank <= 1 step is oversized too. "
+        "Treat Johansen as confirmation rather than as the only gate.")
+    show_list([w for w in res.warnings if "gate" in w])
 
 
 def section_signals(res: PairResearchResult, dark: bool) -> None:
@@ -460,9 +597,10 @@ def section_signals(res: PairResearchResult, dark: bool) -> None:
     frames = [p.backtest.signals for p in res.periods.values()]
     chart(viz.zscore_figure(res.zscore, res.splits, rules.entry_z, rules.exit_z, rules.stop_loss_z, frames, dark), "sig_z")
     st.caption(
-        "Markers sit on the bar whose close produced the signal. Each trade is executed "
-        f"{res.config.strategy.execution_lag} bar(s) later. Every period starts flat. A positive z-score means A is "
-        "expensive relative to B (short spread: short A, long B); a negative z-score means A is cheap (long spread)."
+        "Markers sit on the bar whose close produced the signal. Each trade is executed at the "
+        f"{res.config.strategy.execution_price} of the bar {res.config.strategy.execution_lag} bar(s) later. Every "
+        "period starts flat. A positive z-score means A is expensive relative to B (short spread: short A, long B); a "
+        "negative z-score means A is cheap (long spread)."
     )
     period = st.segmented_control("Signal and execution log", list(res.periods), default="validation",
                                   format_func=lambda k: PERIOD_LABELS[k].split(" (")[0], key="signal_period")
@@ -535,7 +673,7 @@ def section_performance(res: PairResearchResult, dark: bool) -> None:
     if not res.test_revealed:
         st.info("Final test period is locked. Reveal it in the sidebar once the specification is fixed.")
     st.caption(
-        f"Sharpe uses the {res.config.metrics.risk_free_rate:.2%} annual risk-free rate (daily geometric) and "
+        f"Sharpe uses excess returns over {describe_rf(res.config.metrics)} (daily geometric) and "
         f"{res.config.metrics.periods_per_year} periods per year. CAGR and Calmar are shown as n/a for periods "
         f"shorter than {res.config.metrics.min_years_for_cagr:g} year(s). Undefined ratios are n/a, never infinite."
     )
@@ -547,7 +685,8 @@ def section_performance(res: PairResearchResult, dark: bool) -> None:
         "The pairs strategy is a long-short position capped at a gross exposure of "
         f"{res.config.portfolio.max_gross_exposure:.2f}x equity and is often flat. Buy-and-hold benchmarks are fully "
         "invested and long-only, so raw returns are not like-for-like; compare risk-adjusted metrics and drawdowns. "
-        "Benchmarks pay no transaction costs. Cash earns the risk-free rate; idle strategy capital earns zero."
+        "Benchmarks pay no transaction costs. Cash earns the risk-free rate; idle strategy capital earns "
+        + ("the same rate." if res.config.portfolio.cash_interest else "zero (switch on cash interest in the sidebar).")
     )
 
 
@@ -578,6 +717,11 @@ def section_robustness(res: PairResearchResult, dark: bool, params: dict) -> Non
 
     st.subheader("Performance before and after costs")
     chart(viz.cost_sensitivity_figure(res.cost_sensitivity, dark), "rob_costs")
+    if res.config.costs.profile == "generic" and res.config.costs.short_instrument == "cash":
+        st.caption("Cost level = commission + slippage per leg, per side.")
+    else:
+        st.caption("Cost level = slippage per leg, per side, on top of the market's fixed charges (statutory charges, "
+                   "brokerage, futures rolls), which stay as configured.")
     with st.expander("Cost sensitivity tables"):
         for name, frame in res.cost_sensitivity.items():
             st.markdown(f"**{name}**")
@@ -592,8 +736,8 @@ def section_robustness(res: PairResearchResult, dark: bool, params: dict) -> Non
         st.markdown(
             f"Each window fits on the previous **{wfc.train_window}** bars ({'expanding' if wfc.expanding else 'rolling'}), "
             f"trades the next **{wfc.test_window}** bars with frozen parameters, closes positions at the window end, "
-            f"then rolls forward. Windows whose fit period fails the EG test are "
-            f"{'not traded' if wfc.require_cointegration else 'still traded'}. Thresholds: sidebar values. "
+            f"then rolls forward. Windows whose fit period fails the {GATE_LABELS[res.config.cointegration.gate]} "
+            f"gate are {'not traded' if wfc.require_cointegration else 'still traded'}. Thresholds: sidebar values. "
             f"Coverage ends at {'the end of the data' if res.test_revealed else 'the end of the validation period'}."
         )
         chart(viz.walk_forward_figure(wf.windows, dark), "rob_wf_bars")
@@ -644,7 +788,70 @@ def section_universe(res: PairResearchResult, params: dict, dark: bool) -> None:
 
 
 def section_assumptions(res: PairResearchResult) -> None:
-    c = res.config
+    c, k = res.config, res.config.costs
+    if k.short_instrument == "futures":
+        shorts = (
+            f"Short legs are held as **single-stock futures**: no borrow fee; a held futures leg rolls every "
+            f"{k.futures_roll_every_bars} bars at the cost of a futures buy and sell plus {k.futures_roll_spread_bps:g} bps of "
+            f"calendar spread. Initial margin ({k.futures_margin_rate:.0%} of futures notional) is reported, with a warning if "
+            "long exposure plus margin exceeds equity, but it is not a constraint. Futures are marked on the adjusted cash "
+            "price (basis risk ignored); the carry a short futures position earns comes from the cash interest below. "
+            + ("Quantities are rounded down to whole lots (" + ", ".join(f"{t}: {v:g}" for t, v in k.futures_lot_sizes) + ")."
+               if k.futures_lot_sizes else "Lot sizes are not modelled (fractional futures exposure).")
+        )
+    else:
+        shorts = (
+            f"Short legs are **cash shorts**, assumed {'available' if k.short_selling_allowed else 'unavailable (backtests refuse to trade)'} "
+            f"for both assets at the fill price, with a borrow fee of {k.borrow_bps_annual:g} bps per year on prior-close short "
+            "notional, accrued daily. In practice shares may be hard to borrow, recalled, or banned from shorting; Indian "
+            "cash-equity shorting is generally limited to intraday or securities lending (SLB), so multi-day shorts of `.NS` "
+            "shares may be infeasible: select futures shorts for them."
+        )
+    if c.portfolio.cash_interest:
+        financing = (f"Cash earns the risk-free rate ({describe_rf(c.metrics)}), credited daily on equity - long notional + "
+                     "short notional: idle capital, short-sale proceeds (a full rebate before any borrow fee) and the carry "
+                     "of short futures. Sharpe and Sortino use excess returns over the same rate, so a flat book has zero "
+                     "excess return.")
+    else:
+        financing = (f"No interest is earned on idle capital or short-sale proceeds (the baseline). Sharpe ratios subtract "
+                     f"{describe_rf(c.metrics)}.")
+    financing += (f" No margin interest is charged and margin calls are not modelled. Gross exposure is capped at "
+                  f"{c.portfolio.max_gross_exposure:g}x equity at entry and scaled back if it drifts more than "
+                  f"{c.portfolio.rebalance_tolerance or 0:.0%} above the cap.")
+    if k.profile == "nse":
+        m = BacktestConfig.from_research_config(c).market_cost_model()
+        rates = ", ".join(f"{inst} {side} {m.rate_bps(inst, side):.2f} bps" for inst in ("cash", "futures")
+                          for side in ("buy", "sell"))
+        costs = (
+            "**NSE statutory schedule** (late-2024 rates as configured; verify against current NSE/SEBI circulars and your "
+            f"broker's contract notes). All-in rates per leg per side, including {k.slippage_bps:g} bps slippage: {rates}. "
+            f"They comprise STT ({k.stt_delivery_bps:g} bps on delivery buys and sells, {k.stt_futures_sell_bps:g} bps on "
+            f"futures sells), exchange charges ({k.exchange_cash_bps:g} / {k.exchange_futures_bps:g} bps), the SEBI fee, stamp "
+            f"duty on buys ({k.stamp_delivery_buy_bps:g} / {k.stamp_futures_buy_bps:g} bps) and {k.gst_rate:.0%} GST on "
+            f"brokerage, exchange and SEBI charges. Fixed fees: {k.brokerage_flat_futures:g} per futures order (plus GST) and "
+            f"{k.dp_charge_cash_sell:g} per delivery sell."
+        )
+    else:
+        costs = (f"{k.commission_bps:g} bps commission + {k.slippage_bps:g} bps slippage per leg, per side, on traded "
+                 "notional (entries, exits, rebalances and rolls, on both legs). These are generic assumptions, not a "
+                 "broker model; market impact is assumed linear and small.")
+    timing = f"Signals use the close of bar t; trades fill at the **{c.strategy.execution_price}** of bar t + {c.strategy.execution_lag}. "
+    if c.strategy.execution_price == "open":
+        timing += ("Units carried overnight are marked from the previous close to the fill price and units held after "
+                   "trading from the fill to the close, so the overnight gap after a signal is not earned. Opens are adjusted "
+                   "with the close's factor (Open x Adj Close / Close); a bar without a usable open falls back to its close "
+                   "and is reported. ")
+    else:
+        timing += "P&L is marked close to close on units held. "
+    timing += "The last bar of each period liquidates open positions; no signal from the final bars is executed beyond the data."
+    stops = []
+    if c.strategy.stop_loss_z is not None:
+        stops.append(f"a stop-loss at |z| >= {c.strategy.stop_loss_z:g}")
+    if c.strategy.max_holding_days is not None:
+        stops.append(f"a maximum holding period of {c.strategy.max_holding_days} bars")
+    if c.strategy.max_holding_half_lives is not None:
+        stops.append(f"a time stop after ceil({c.strategy.max_holding_half_lives:g} x the fitting window's AR(1) half-life) bars")
+    gate = GATE_LABELS[c.cointegration.gate]
     st.markdown(f"""
 **Price adjustments.** Research uses `{res.pair.price_column_a}` for {res.names['A']} and `{res.pair.price_column_b}` for
 {res.names['B']}. Yahoo `Adj Close` is split- and dividend-adjusted by the provider and used as delivered (no further
@@ -652,35 +859,33 @@ adjustment, so no double adjustment). Back-adjusted prices are proportional to a
 proportionality is absorbed by the regression intercept. Adjusted returns imply dividends are received on long legs and
 paid on short legs. CSV data is used exactly as supplied.
 
-**Short selling.** Assumed {'available' if c.costs.short_selling_allowed else 'unavailable (backtests refuse to trade)'}
-for both assets at the closing price. In practice shares may be hard to borrow, recalled, or banned from shorting;
-Indian cash-equity shorting is generally limited to intraday or securities lending (SLB), so multi-day shorts of `.NS`
-shares may be infeasible without derivatives.
+**Short selling.** {shorts}
 
-**Borrow and financing.** Short borrow fee {c.costs.borrow_bps_annual:g} bps per year on prior-close short notional,
-accrued daily. No interest is earned on idle capital or short-sale proceeds, no margin interest is charged, and margin
-calls are not modelled. Gross exposure is capped at {c.portfolio.max_gross_exposure:g}x equity at entry and scaled back
-if it drifts more than {c.portfolio.rebalance_tolerance or 0:.0%} above the cap.
+**Borrow and financing.** {financing}
 
-**Transaction costs.** {c.costs.commission_bps:g} bps commission + {c.costs.slippage_bps:g} bps slippage per leg, per
-side, on traded notional (entries, exits and rebalances, on both legs). These are generic assumptions, not a broker
-model; market impact is assumed linear and small.
+**Transaction costs.** {costs}
 
-**Execution timing.** Signals use the close of bar t; trades fill at the close of bar t + {c.strategy.execution_lag}.
-P&L is marked close to close on units held. The last bar of each period liquidates open positions; no signal from the
-final bars is executed beyond the data.
+**Execution timing.** {timing}
+
+**Risk controls.** {'Exits: ' + '; '.join(stops) + '.' if stops else 'No stop-loss, maximum holding period or time stop.'}
+
+**Cointegration gate.** Walk-forward windows (and, {'with' if c.evaluation.static_require_cointegration else 'only if switched on,'}
+the static periods) are traded only if their fitting window passes the **{gate}** test(s) at
+{c.cointegration.significance:.0%}.
 
 **Estimation windows.** Static workflow: hedge ratio, intercept, spread mean and std are estimated on the training
-period ({res.splits['train'].start_date} to {res.splits['train'].end_date}) and frozen. Walk-forward: re-estimated every
-{c.walk_forward.test_window} bars on a {'expanding' if c.walk_forward.expanding else f'rolling {c.walk_forward.train_window}-bar'} window.
+period ({res.splits['train'].start_date} to {res.splits['train'].end_date}) and frozen
+{'until the test period, which uses a refit on training + validation' if c.evaluation.static_refit_before_test else 'for every later period'}.
+Walk-forward: re-estimated every {c.walk_forward.test_window} bars on a
+{'expanding' if c.walk_forward.expanding else f'rolling {c.walk_forward.train_window}-bar'} window.
 
 **Data source.** {res.pair.metadata_a.get('source')} / {res.pair.metadata_b.get('source')}, retrieved
 {res.pair.metadata_a.get('retrieved_at')}. Free providers may revise, back-fill or remove history; the SHA-256 hash of each
 input is recorded with saved runs so changes can be detected.
 
-**Not modelled:** intraday execution, partial fills, capacity, corporate-action timing risk, taxes, currency effects, and
-survivorship bias in the choice of instruments. This is a research tool, not a trading system, and nothing here is
-financial advice.
+**Not modelled:** intraday execution, partial fills, capacity, corporate-action timing risk, taxes, currency effects,
+futures basis, and survivorship bias in the choice of instruments. This is a research tool, not a trading system, and
+nothing here is financial advice.
 """)
 
 
@@ -704,11 +909,24 @@ def section_ml_models(ml: MLResearchResult, dark: bool) -> None:
         f"spread parameters are frozen on the training period. A row is used only if its label horizon ends inside its own "
         f"period (an {cfg.horizon}-bar purge, plus {cfg.embargo} embargo bar(s) on the fit set), so no label crosses into the "
         "next period. The last bars of the data have no label and are excluded.", unsafe_allow_html=True)
+    if cfg.training_features == "point_in_time":
+        st.markdown(
+            f"**Training rows are built point in time.** Each {cfg.pit_block}-bar block of the training period gets its own "
+            f"spread parameters, estimated only on the {cfg.pit_estimation_window or ml.config.walk_forward.train_window} bars "
+            "before the block. Its features and labels are computed with those parameters, exactly as a live prediction "
+            "would be. Validation and test rows use the frozen training model. The first block needs a full estimation "
+            "window of history, so the earliest training bars yield no rows.")
+    else:
+        st.caption("Training rows use the spread parameters fitted on the whole training period, including bars after each "
+                   "row (the baseline). The v3 protocol builds them point in time instead.")
 
     st.subheader("Samples and evaluation dates")
     st.dataframe(tidy(ml.sample_table.reset_index(), 4), hide_index=True)
     st.caption("rows_used counts eligible bars with complete features and an in-period label. Positive rate is the "
                "share of rows that reverted, so accuracy should be compared with the majority-class rate.")
+    if ml.pit_blocks is not None:
+        with st.expander(f"Point-in-time training blocks ({len(ml.pit_blocks)})"):
+            st.dataframe(tidy(ml.pit_blocks, 6), hide_index=True)
 
     st.subheader("Model settings")
     rows = []
@@ -836,12 +1054,12 @@ def section_strategy_comparison(ml: MLResearchResult, dark: bool) -> None:
   prediction still supports the position (then it is renewed without trading).
 - **C. Hybrid:** A's entry rule *and* P(reversion) ≥ threshold on the entry bar. A's exits and risk controls are
   unchanged.
-- **B0** (v2 only): B's rules driven by the constant prevalence forecast (no model). B minus B0 isolates what the
+- **B0** (v2 and v3): B's rules driven by the constant prevalence forecast (no model). B minus B0 isolates what the
   model adds beyond B's rule changes.
 
-Thresholds: {thr_text}. All variants use the same dates, execution lag
-({ml.config.strategy.execution_lag} bar), gross-exposure sizing, two-leg commission and slippage, borrow fee,
-short-selling assumption and end-of-period liquidation, and each period starts flat.
+Thresholds: {thr_text}. All variants use the same dates, execution ({ml.config.strategy.execution_lag}-bar lag, fills
+at the {ml.config.strategy.execution_price}), gross-exposure sizing, cost model, short-leg instrument, cash interest and
+end-of-period liquidation, and each period starts flat.
 """)
     options = {p: PERIOD_LABELS[p] for p in ml.comparisons}
     if ml.walk_forward is not None:
@@ -921,7 +1139,7 @@ def section_export(res: PairResearchResult, ml: MLResearchResult | None = None) 
         tables = {**tables, **ml_tables}
         groups["ML models (predictions, metrics, calibration, importance, tuning)"] = [
             k for k in ml_tables if k.startswith(("ml_samples", "ml_classification", "ml_predictions", "ml_calibration",
-                                                  "ml_importance", "ml_tuning", "ml_threshold"))]
+                                                  "ml_importance", "ml_tuning", "ml_threshold", "ml_point_in_time"))]
         groups["Strategy comparison A/B/C"] = [
             k for k in ml_tables if k.startswith(("strategy_", "trades_", "ml_walk_forward"))]
     for title, keys in groups.items():
@@ -967,6 +1185,7 @@ def main() -> None:
     except ValueError as exc:
         st.error(f"Data problem: {exc}")
         st.stop()
+    config = config.for_pair(pair.ticker_a, pair.ticker_b)  # market overrides, if the config defines any
 
     if pair.is_synthetic:
         st.warning("SYNTHETIC DATA: these series are generated for demonstration. Results illustrate the method only "
@@ -990,10 +1209,18 @@ def main() -> None:
         except ValueError as exc:
             st.warning(f"ML comparison could not be completed: {exc}")
 
-    if not res.model.coint.reject_null:
-        st.error(f"{pair.ticker_a} / {pair.ticker_b} does not pass the training-period Engle-Granger test at the "
-                 f"{config.cointegration.significance:.0%} level (p = {res.model.coint.p_value:.3f}). All backtests "
-                 "below are exploratory.", icon=":material/warning:")
+    gate = config.cointegration.gate
+    if not res.model.passes_gate(config):
+        if gate == "eg":
+            st.error(f"{pair.ticker_a} / {pair.ticker_b} does not pass the training-period Engle-Granger test at the "
+                     f"{config.cointegration.significance:.0%} level (p = {res.model.coint.p_value:.3f}). All backtests "
+                     "below are exploratory.", icon=":material/warning:")
+        else:
+            st.error(f"{pair.ticker_a} / {pair.ticker_b} does not pass the training-period cointegration gate "
+                     f"({GATE_LABELS[gate]}) at the {config.cointegration.significance:.0%} level. All backtests below "
+                     "are exploratory.", icon=":material/warning:")
+        if not static_tradable(res, "validation"):
+            st.warning("The static gate is on, so the training and validation periods are held flat.")
     dark = is_dark()
     tabs = st.tabs(["A. Overview", "B. Exploratory analysis", "C. Cointegration", "D. Spread and signals",
                     "E. Portfolio and backtest", "F. Performance report", "G. Robustness", "H. Assumptions",

@@ -9,6 +9,7 @@ description = "StatArb Research Lab: a reproducible research platform for cointe
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
+authors = [{ name = "Divyansh Kaushal" }]
 dependencies = [
     "numpy>=2.0,<3",
     "pandas>=2.2,<4",
@@ -18,6 +19,10 @@ dependencies = [
     "PyYAML>=6.0,<7",
     "plotly>=5.22,<8",
 ]
+
+[project.urls]
+Homepage = "https://github.com/DIVY3200/StatArb-Research-Lab"
+Issues = "https://github.com/DIVY3200/StatArb-Research-Lab/issues"
 
 [project.optional-dependencies]
 data = ["yfinance>=0.2.50,<2"]

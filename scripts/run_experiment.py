@@ -1,8 +1,12 @@
-"""Pre-registered v2 experiment runner (see docs/research/PREREGISTRATION.md).
+"""Pre-registered experiment runner (v2: docs/research/PREREGISTRATION.md; v3: docs/research/v3/).
+
+Each study keeps its pre-registration, freeze record and holdout marker in ``holdout.protocol_dir``
+of its config (v2: ``docs/research``; v3: ``docs/research/v3``). Pass ``--config config/research_v3.yaml``
+for v3; the default is the v2 config.
 
 Stages
 ------
-1. Development (2015-2024 data only; the holdout guard refuses anything later)::
+1. Development (data up to ``holdout.development_end`` only; the holdout guard refuses anything later)::
 
        python scripts/run_experiment.py --stage development
 
@@ -38,6 +42,7 @@ from statarb.config import load_config, resolve_path, save_config_snapshot  # no
 from statarb.data_loader import download_yfinance  # noqa: E402
 from statarb.experiment import (  # noqa: E402
     CANDIDATES,
+    assumption_checks,
     bootstrap_summary,
     calendar_breakdown,
     cost_sensitivity,
@@ -45,7 +50,9 @@ from statarb.experiment import (  # noqa: E402
     gross_pooled_returns,
     pooled_classification,
     pooled_returns,
+    risk_free_daily,
     run_pair,
+    uses_risk_free,
     variant_table,
     volatility_regimes,
 )
@@ -53,10 +60,18 @@ from statarb.ml_evaluation import MODEL_NAMES  # noqa: E402
 from statarb.ml_strategy import VARIANT_LABELS  # noqa: E402
 from statarb.protocol import allowed_end_date, code_fingerprint, file_sha256  # noqa: E402
 
-PREREG = ROOT / "docs" / "research" / "PREREGISTRATION.md"
-FREEZE = ROOT / "docs" / "research" / "freeze.json"
-HOLDOUT_MARKER = ROOT / "docs" / "research" / "holdout_evaluated.json"
 DEFAULT_CONFIG = ROOT / "config" / "research_v2.yaml"
+
+
+def protocol_paths(config_path: Path) -> dict[str, Path]:
+    """Pre-registration, freeze record and holdout marker of the study that ``config_path`` belongs to."""
+    base = ROOT / load_config(config_path).holdout.protocol_dir
+    return {"prereg": base / "PREREGISTRATION.md", "freeze": base / "freeze.json",
+            "marker": base / "holdout_evaluated.json"}
+
+
+def _rel(path: Path) -> str:
+    return str(path.relative_to(ROOT)).replace("\\", "/")
 
 
 def _now() -> str:
@@ -89,13 +104,14 @@ def _environment() -> dict[str, str]:
 
 def _fingerprints(config_path: Path) -> dict[str, str]:
     return {"code_fingerprint": code_fingerprint([config_path]), "config_sha256": file_sha256(config_path),
-            "preregistration_sha256": file_sha256(PREREG)}
+            "preregistration_sha256": file_sha256(protocol_paths(config_path)["prereg"])}
 
 
 def verify_freeze(config_path: Path) -> dict:
-    if not FREEZE.exists():
-        raise SystemExit("REFUSED: no specification freeze found (docs/research/freeze.json). Run --freeze first.")
-    freeze = json.loads(FREEZE.read_text(encoding="utf-8"))
+    path = protocol_paths(config_path)["freeze"]
+    if not path.exists():
+        raise SystemExit(f"REFUSED: no specification freeze found ({_rel(path)}). Run --freeze first.")
+    freeze = json.loads(path.read_text(encoding="utf-8"))
     current = _fingerprints(config_path)
     mismatched = [k for k, v in current.items() if freeze.get(k) != v]
     if mismatched:
@@ -116,13 +132,14 @@ def freeze(dev_dir: str, config_path: Path) -> None:
     for key in ("code_fingerprint", "config_sha256"):
         if manifest[key] != current[key]:
             raise SystemExit(f"REFUSED: {key} differs from the development run; re-run development first.")
-    if "Frozen:" not in PREREG.read_text(encoding="utf-8"):
-        raise SystemExit("REFUSED: complete section 9 of PREREGISTRATION.md (add a 'Frozen:' line) before freezing.")
-    record = {"frozen_at": _now(), **current, "config_path": str(config_path.relative_to(ROOT)).replace("\\", "/"),
-              "development_run": str(dev.relative_to(ROOT)).replace("\\", "/"),
-              "development_summary_sha256": file_sha256(dev / "summary.json")}
-    FREEZE.write_text(json.dumps(record, indent=2), encoding="utf-8")
-    print(f"Specification frozen: {FREEZE}")
+    paths = protocol_paths(config_path)
+    if "Frozen:" not in paths["prereg"].read_text(encoding="utf-8"):
+        raise SystemExit(f"REFUSED: complete the freeze section of {_rel(paths['prereg'])} (add a 'Frozen:' line) "
+                         "before freezing.")
+    record = {"frozen_at": _now(), **current, "config_path": _rel(config_path),
+              "development_run": _rel(dev), "development_summary_sha256": file_sha256(dev / "summary.json")}
+    paths["freeze"].write_text(json.dumps(record, indent=2), encoding="utf-8")
+    print(f"Specification frozen: {paths['freeze']}")
     print(json.dumps(record, indent=2))
 
 
@@ -132,9 +149,14 @@ def run(stage: str, config_path: Path) -> Path:
         raise SystemExit("REFUSED: the experiment config must enforce the holdout (holdout.enforce: true).")
     final = stage == "final"
     freeze_record = None
+    marker = protocol_paths(config_path)["marker"]
     if final:
-        if HOLDOUT_MARKER.exists():
-            raise SystemExit(f"REFUSED: the holdout was already evaluated ({HOLDOUT_MARKER}). It is evaluated once.")
+        if marker.exists():
+            raise SystemExit(f"REFUSED: the holdout was already evaluated ({_rel(marker)}). It is evaluated once.")
+        today = pd.Timestamp(datetime.now(timezone.utc).date())
+        if today <= pd.Timestamp(config.holdout.holdout_end):
+            raise SystemExit(f"REFUSED: the holdout runs to {config.holdout.holdout_end}; it can be evaluated only "
+                             "after that date, with the complete holdout data.")
         freeze_record = verify_freeze(config_path)
     end = config.holdout.holdout_end if final else config.holdout.development_end
     end = allowed_end_date(config, end, final_evaluation=final)
@@ -162,24 +184,34 @@ def run(stage: str, config_path: Path) -> Path:
 
     dailies = [r.wf.daily for r in runs]
     trades = [r.wf.trades for r in runs]
+    rf = risk_free_daily(runs, config)
     pooled = pooled_returns(dailies)
-    table = variant_table(pooled, gross_pooled_returns(dailies), dailies, trades, config)
-    boot = bootstrap_summary(pooled, config.inference, n_candidates=len(CANDIDATES))
+    excess = pooled_returns(dailies, rf_daily=rf) if uses_risk_free(rf) else None  # Sharpe on excess returns
+    table = variant_table(pooled, gross_pooled_returns(dailies), dailies, trades, config, pooled_excess=excess)
+    boot = bootstrap_summary(pooled if excess is None else excess, config.inference, n_candidates=len(CANDIDATES))
     classification = {m: pooled_classification(runs, m, config.ml.horizon, config.ml.calibration_bins) for m in MODEL_NAMES}
     costs = cost_sensitivity(runs, config, config.robustness.cost_grid_bps)
+    checks = assumption_checks(runs, config)
     years = calendar_breakdown(pooled)
-    regimes = volatility_regimes(runs, pooled)
+    regimes = volatility_regimes(runs, pooled if excess is None else excess)
     per_pair = {}
-    for r in runs:
+    for r, r_rf in zip(runs, rf):
         single = pooled_returns([r.wf.daily])
-        per_pair[r.label] = variant_table(single, gross_pooled_returns([r.wf.daily]), [r.wf.daily], [r.wf.trades], config)
+        single_excess = pooled_returns([r.wf.daily], rf_daily=[r_rf]) if uses_risk_free([r_rf]) else None
+        per_pair[r.label] = variant_table(single, gross_pooled_returns([r.wf.daily]), [r.wf.daily], [r.wf.trades],
+                                          r.config, pooled_excess=single_excess)
 
-    out = ROOT / "reports" / "experiments" / f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}_{stage}"
+    study = Path(config.holdout.protocol_dir).name
+    suffix = "" if config.holdout.protocol_dir == "docs/research" else f"_{study}"
+    out = ROOT / "reports" / "experiments" / f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}_{stage}{suffix}"
     out.mkdir(parents=True, exist_ok=False)
     save_config_snapshot(config, out / "config_snapshot.yaml")
     pooled.rename(columns=VARIANT_LABELS).to_csv(out / "pooled_net_returns.csv")
+    if excess is not None:
+        excess.rename(columns=VARIANT_LABELS).to_csv(out / "pooled_excess_returns.csv")
     table.to_csv(out / "variant_metrics_pooled.csv")
     costs.to_csv(out / "cost_sensitivity.csv", index=False)
+    checks.to_csv(out / "assumption_checks.csv", index=False)
     years.to_csv(out / "calendar_years.csv")
     regimes.to_csv(out / "volatility_regimes.csv")
     for r in runs:
@@ -193,14 +225,17 @@ def run(stage: str, config_path: Path) -> Path:
 
     summary = {
         "stage": stage, "evaluation_dates": [str(pooled.index[0].date()), str(pooled.index[-1].date())],
+        "risk_free_by_pair": {r.label: r.config.metrics.risk_free for r in runs},
+        "sharpe_basis": "net returns (risk-free rate 0)" if excess is None else "excess returns over each market's rate",
         "pooled_metrics": table.to_dict(), "per_pair_metrics": {k: v.to_dict() for k, v in per_pair.items()},
         "bootstrap": boot, "classification": classification,
-        "cost_sensitivity": costs.to_dict(orient="records"), "calendar_years": years.to_dict(),
+        "cost_sensitivity": costs.to_dict(orient="records"), "assumption_checks": checks.to_dict(orient="records"),
+        "calendar_years": years.to_dict(),
         "volatility_regimes": regimes.to_dict(),
     }
     (out / "summary.json").write_text(json.dumps(_json(summary), indent=2), encoding="utf-8")
     manifest = {"stage": stage, "started_at": started, "finished_at": _now(), **_fingerprints(config_path),
-                "config_path": str(config_path.relative_to(ROOT)).replace("\\", "/"), "data_end": end,
+                "config_path": _rel(config_path), "data_end": end,
                 "first_evaluation_date": first_eval, "pairs": pair_meta, "environment": _environment(),
                 "random_seed": config.reproducibility.random_seed, "bootstrap_seed": config.inference.seed,
                 "freeze": freeze_record}
@@ -210,8 +245,8 @@ def run(stage: str, config_path: Path) -> Path:
         development = json.loads((ROOT / freeze_record["development_run"] / "summary.json").read_text(encoding="utf-8"))
         decision = evaluate_decision(development, _json(summary), costs)
         (out / "decision.json").write_text(json.dumps(_json(decision), indent=2), encoding="utf-8")
-        HOLDOUT_MARKER.write_text(json.dumps({"evaluated_at": _now(), "run": str(out.relative_to(ROOT)).replace("\\", "/"),
-                                              "decision": decision["overall"]}, indent=2), encoding="utf-8")
+        marker.write_text(json.dumps({"evaluated_at": _now(), "run": _rel(out), "decision": decision["overall"]},
+                                     indent=2), encoding="utf-8")
         print("DECISION:", decision["overall"])
 
     with pd.option_context("display.width", 250, "display.max_columns", None, "display.float_format", "{:,.4f}".format):

@@ -120,6 +120,8 @@ class AlignedPair:
     validation_b: ValidationReport | None = None
     metadata_a: dict[str, object] = field(default_factory=dict)
     metadata_b: dict[str, object] = field(default_factory=dict)
+    # Opening prices on the same dates, on the same adjustment basis as ``prices`` (NaN where unusable).
+    opens: pd.DataFrame | None = None
 
     @property
     def log_prices(self) -> pd.DataFrame:
@@ -324,6 +326,20 @@ def _exchange_suffix(ticker: str) -> str:
     return ticker.rsplit(".", 1)[1].upper() if "." in ticker else ""
 
 
+def adjusted_open(frame: pd.DataFrame, price_column: str) -> pd.Series | None:
+    """Opening price on the basis of ``price_column``: ``Open * Adj Close / Close`` for adjusted prices.
+
+    Yahoo's ``Open`` is split-adjusted but not dividend-adjusted, so the same-day adjustment factor of the
+    close is applied. Non-positive or missing values become NaN (they are never filled).
+    """
+    if "Open" not in frame.columns:
+        return None
+    open_ = frame["Open"].astype(float)
+    if price_column == "Adj Close" and "Close" in frame.columns:
+        open_ = open_ * (frame["Adj Close"].astype(float) / frame["Close"].astype(float))
+    return open_.where(np.isfinite(open_) & (open_ > 0))
+
+
 def detect_special_sessions(
     dates: pd.DatetimeIndex,
     frames: tuple[pd.DataFrame, pd.DataFrame],
@@ -418,6 +434,16 @@ def prepare_pair(
         alignment.warnings.append(f"{len(flagged)} special/non-regular session(s) dropped before analysis.")
         if len(prices) < min_observations:
             raise ValueError(f"Only {len(prices)} observations remain after dropping special sessions.")
+    open_a = adjusted_open(clean_a, report_a.price_column)
+    open_b = adjusted_open(clean_b, report_b.price_column)
+    opens = None
+    if open_a is not None and open_b is not None:
+        opens = pd.DataFrame({"A": open_a.reindex(prices.index), "B": open_b.reindex(prices.index)})
+        opens.index.name = "Date"
+        missing = int(opens.isna().any(axis=1).sum())
+        if missing:
+            alignment.warnings.append(f"{missing} bar(s) lack a usable opening price; next-open execution falls "
+                                      "back to the close on those bars.")
     return AlignedPair(
         prices=prices,
         ticker_a=asset_a.ticker,
@@ -429,6 +455,7 @@ def prepare_pair(
         validation_b=report_b,
         metadata_a=asset_a.metadata(),
         metadata_b=asset_b.metadata(),
+        opens=opens,
     )
 
 
@@ -449,6 +476,7 @@ __all__ = [
     "AlignedPair",
     "AlignmentReport",
     "ValidationReport",
+    "adjusted_open",
     "align_pair",
     "detect_special_sessions",
     "prepare_pair",

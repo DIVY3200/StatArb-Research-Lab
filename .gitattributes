@@ -8,3 +8,8 @@ docs/research/PREREGISTRATION.md -text
 docs/research/freeze.json -text
 docs/research/holdout_evaluated.json -text
 docs/research/results/** -text
+
+# v3 study: files whose SHA-256 is recorded in the run manifests (and, after a freeze, in docs/research/v3/freeze.json).
+config/research_v3.yaml -text
+docs/research/v3/PREREGISTRATION.md -text
+docs/research/v3/results/** -text

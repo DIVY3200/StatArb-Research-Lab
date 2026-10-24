@@ -5,6 +5,11 @@ guard and the freeze checks live in ``scripts/run_experiment.py``.
 
 Primary portfolio: for each variant, the equal-weight average of the pairs' daily net returns on the
 union of their trading calendars (a pair contributes 0 on days it does not trade).
+
+Each pair runs under its own market's settings (``markets:`` overrides, e.g. NSE costs or an INR
+risk-free rate). Sharpe ratios and their bootstrap intervals use *excess* returns: every pair's daily
+net return minus its own market's daily risk-free rate, on that pair's trading days. With a zero
+risk-free rate (v2) excess and net returns coincide.
 """
 
 from __future__ import annotations
@@ -19,7 +24,7 @@ from .data_loader import AssetData
 from .data_validation import AlignedPair, prepare_pair_from_config
 from .evaluation import signal_rules_from_config
 from .inference import bootstrap_sharpe, bootstrap_sharpe_difference, effective_sample_size
-from .metrics import return_metrics
+from .metrics import daily_risk_free_series, return_metrics, sharpe_ratio, sortino_ratio
 from .ml_evaluation import MLWalkForwardResult, reprice_walk_forward, run_ml_walk_forward
 from .ml_strategy import VARIANT_LABELS
 
@@ -39,12 +44,17 @@ class PairRun:
     eval_start: str = ""
     eval_end: str = ""
     notes: list[str] = field(default_factory=list)
+    config: object = None  # the pair's config after market overrides
 
 
 def run_pair(asset_a: AssetData, asset_b: AssetData, config, first_eval_date: str | None = None) -> PairRun:
-    """Prepare one pair and run the A/B/C walk-forward (nested tuning required)."""
+    """Prepare one pair and run the A/B/C walk-forward (nested tuning required).
+
+    The pair's market overrides (``config.for_pair``) are applied before anything is computed.
+    """
     if config.ml.walk_forward_tuning != "nested":
-        raise ValueError("The v2 experiment requires ml.walk_forward_tuning: nested (point-in-time tuning).")
+        raise ValueError("The experiment requires ml.walk_forward_tuning: nested (point-in-time tuning).")
+    config = config.for_pair(asset_a.ticker, asset_b.ticker)
     pair = prepare_pair_from_config(asset_a, asset_b, config.data)
     first_idx = None
     if first_eval_date is not None:
@@ -52,9 +62,31 @@ def run_pair(asset_a: AssetData, asset_b: AssetData, config, first_eval_date: st
         if first_idx >= len(pair.prices):
             raise ValueError(f"No {asset_a.ticker}/{asset_b.ticker} observations on or after {first_eval_date}.")
     wf = run_ml_walk_forward(pair.prices, config, signal_rules_from_config(config), None, None,
-                             names={"A": pair.ticker_a, "B": pair.ticker_b}, first_eval_idx=first_idx)
+                             names={"A": pair.ticker_a, "B": pair.ticker_b}, first_eval_idx=first_idx,
+                             opens=pair.opens)
     index = wf.daily["traditional"].index
-    return PairRun(f"{pair.ticker_a}/{pair.ticker_b}", pair, first_idx, wf, str(index[0].date()), str(index[-1].date()))
+    return PairRun(f"{pair.ticker_a}/{pair.ticker_b}", pair, first_idx, wf, str(index[0].date()), str(index[-1].date()),
+                   config=config)
+
+
+def risk_free_daily(runs: list[PairRun], config=None) -> list[pd.Series]:
+    """Each pair's daily risk-free rate on its own trading dates (its market's rate or year schedule).
+
+    The first date is 0: the pair's account starts at that close, so no holding period precedes it.
+    """
+    out = []
+    for r in runs:
+        m = (r.config or config).metrics
+        rate = daily_risk_free_series(m.risk_free, r.wf.daily["traditional"].index, m.periods_per_year)
+        if len(rate):
+            rate.iloc[0] = 0.0
+        out.append(rate)
+    return out
+
+
+def uses_risk_free(rf_daily) -> bool:
+    """Whether any pair has a non-zero risk-free rate (otherwise excess and net returns coincide)."""
+    return any(bool(np.any(np.asarray(r, dtype=float) != 0.0)) for r in rf_daily or [])
 
 
 # --------------------------------------------------------------------------- portfolio construction
@@ -65,14 +97,27 @@ def _variants(dailies, variants):
     return [v for v in order if v in dailies[0]]
 
 
-def pooled_returns(dailies: list[dict[str, pd.DataFrame]], variants=None) -> pd.DataFrame:
-    """Equal-weight portfolio of pairs per variant on the union calendar (0 on non-trading days)."""
+def pooled_returns(dailies: list[dict[str, pd.DataFrame]], variants=None, rf_daily: list[float] | None = None
+                   ) -> pd.DataFrame:
+    """Equal-weight portfolio of pairs per variant on the union calendar (0 on non-trading days).
+
+    ``rf_daily`` (one rate per pair) turns it into the pooled *excess* return: each pair's daily
+    risk-free rate is subtracted on that pair's own trading days.
+    """
     variants = _variants(dailies, variants)
+    rf = rf_daily if uses_risk_free(rf_daily) else [0.0] * len(dailies)
     out = {}
     for v in variants:
-        frame = pd.concat([d[v]["net_return"] for d in dailies], axis=1).sort_index().fillna(0.0)
+        legs = [_minus(d[v]["net_return"], r) for d, r in zip(dailies, rf)]
+        frame = pd.concat(legs, axis=1).sort_index().fillna(0.0)
         out[v] = frame.mean(axis=1)
     return pd.DataFrame(out)
+
+
+def _minus(returns: pd.Series, rf) -> pd.Series:
+    if isinstance(rf, pd.Series):
+        return returns - rf.reindex(returns.index).fillna(0.0)
+    return returns - rf if rf else returns
 
 
 def gross_pooled_returns(dailies: list[dict[str, pd.DataFrame]], variants=None) -> pd.DataFrame:
@@ -102,11 +147,17 @@ def activity(dailies: list[dict[str, pd.DataFrame]], trades: list[dict[str, pd.D
     }
 
 
-def variant_table(pooled: pd.DataFrame, pooled_gross: pd.DataFrame, dailies, trades, config) -> pd.DataFrame:
+def variant_table(pooled: pd.DataFrame, pooled_gross: pd.DataFrame, dailies, trades, config,
+                  pooled_excess: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Pooled metrics per variant. With ``pooled_excess``, Sharpe and Sortino use those excess returns."""
     m = config.metrics
     rows = {}
     for v in pooled.columns:
-        stats = return_metrics(pooled[v], m.risk_free_rate, m.periods_per_year, m.min_years_for_cagr)
+        rf = m.risk_free if pooled_excess is None else 0.0
+        stats = return_metrics(pooled[v], rf, m.periods_per_year, m.min_years_for_cagr)
+        if pooled_excess is not None:
+            stats["sharpe_ratio"] = sharpe_ratio(pooled_excess[v], 0.0, m.periods_per_year)
+            stats["sortino_ratio"] = sortino_ratio(pooled_excess[v], 0.0, m.periods_per_year)
         stats["gross_cumulative_return"] = return_metrics(pooled_gross[v])["cumulative_return"]
         stats.update(activity(dailies, trades, v, config.portfolio.initial_capital))
         rows[VARIANT_LABELS[v]] = stats
@@ -188,17 +239,69 @@ def bootstrap_summary(pooled: pd.DataFrame, inference_cfg, n_candidates: int = 4
 
 
 # --------------------------------------------------------------------------- sensitivity and regimes
+def at_cost_level(config, bps: float):
+    """``config`` at one per-leg, per-side cost level.
+
+    Generic costs with cash shorts (the baseline): commission = level, slippage = 0. Market profiles
+    (e.g. NSE) or futures shorts: statutory charges stay as configured and the level is the slippage.
+    """
+    c = config.costs
+    if c.profile == "generic" and c.short_instrument == "cash":
+        return config.with_overrides({"costs": {"commission_bps": float(bps), "slippage_bps": 0.0}})
+    return config.with_overrides({"costs": {"slippage_bps": float(bps)}})
+
+
 def cost_sensitivity(runs: list[PairRun], config, cost_grid_bps) -> pd.DataFrame:
-    """Re-price stored signals at each cost level (commission = level, slippage = 0); models are not refitted."""
+    """Re-price stored signals at each cost level (see :func:`at_cost_level`); models are not refitted."""
     rows = []
+    rf = risk_free_daily(runs, config)
     for bps in cost_grid_bps:
-        cfg = config.with_overrides({"costs": {"commission_bps": float(bps), "slippage_bps": 0.0}})
-        dailies = [reprice_walk_forward(r.pair.prices, cfg, r.wf) for r in runs]
+        dailies = [reprice_walk_forward(r.pair.prices, at_cost_level(r.config or config, bps), r.wf, opens=r.pair.opens)
+                   for r in runs]
         pooled = pooled_returns(dailies)
+        excess = pooled_returns(dailies, rf_daily=rf) if uses_risk_free(rf) else pooled
         for v in pooled.columns:
-            stats = return_metrics(pooled[v])
             rows.append({"cost_bps_per_leg_per_side": float(bps), "variant": VARIANT_LABELS[v],
-                         "cumulative_return": stats["cumulative_return"], "sharpe_ratio": stats["sharpe_ratio"]})
+                         "cumulative_return": return_metrics(pooled[v])["cumulative_return"],
+                         "sharpe_ratio": return_metrics(excess[v])["sharpe_ratio"]})
+    return pd.DataFrame(rows)
+
+
+#: The v2 execution and cost assumptions, used to measure what the v3 realism upgrades change.
+V2_EXECUTION = {"strategy": {"execution_price": "close"},
+                "costs": {"profile": "generic", "short_instrument": "cash", "commission_bps": 5.0, "slippage_bps": 5.0,
+                          "borrow_bps_annual": 50.0},
+                "portfolio": {"cash_interest": False}}
+
+
+def assumption_checks(runs: list[PairRun], config) -> pd.DataFrame:
+    """Re-price the stored signals under alternative assumptions (models, gates and signals unchanged).
+
+    * ``as run``: the study's own assumptions (Sharpe on excess returns when a risk-free rate is set);
+    * ``cash interest off``: no interest credit, Sharpe at rf = 0 (shows how much the rate level matters);
+    * ``v2 execution and costs``: close fills, generic 5 + 5 bps costs, cash shorts with a 50 bps borrow fee and
+      no interest, i.e. what the execution and cost upgrades change for the same trading decisions.
+    """
+    rf = risk_free_daily(runs, config)
+    scenarios = {"as run": None, "cash interest off": {"portfolio": {"cash_interest": False}},
+                 "v2 execution and costs": V2_EXECUTION}
+    rows = []
+    for name, overrides in scenarios.items():
+        if overrides is None:
+            dailies = [r.wf.daily for r in runs]
+            pooled = pooled_returns(dailies)
+            excess = uses_risk_free(rf)
+            sharpe_input = pooled_returns(dailies, rf_daily=rf) if excess else pooled
+            basis = "excess" if excess else "net"
+        else:
+            dailies = [reprice_walk_forward(r.pair.prices, (r.config or config).with_overrides(overrides), r.wf,
+                                            opens=r.pair.opens) for r in runs]
+            pooled = sharpe_input = pooled_returns(dailies)
+            basis = "net"
+        for v in pooled.columns:
+            rows.append({"scenario": name, "variant": VARIANT_LABELS[v],
+                         "cumulative_return": return_metrics(pooled[v])["cumulative_return"],
+                         "sharpe_ratio": return_metrics(sharpe_input[v])["sharpe_ratio"], "sharpe_basis": basis})
     return pd.DataFrame(rows)
 
 
@@ -266,7 +369,10 @@ __all__ = [
     "CANDIDATES",
     "PairRun",
     "VARIANTS",
+    "V2_EXECUTION",
     "activity",
+    "assumption_checks",
+    "at_cost_level",
     "bootstrap_summary",
     "calendar_breakdown",
     "cost_sensitivity",
@@ -274,7 +380,9 @@ __all__ = [
     "gross_pooled_returns",
     "pooled_classification",
     "pooled_returns",
+    "risk_free_daily",
     "run_pair",
+    "uses_risk_free",
     "variant_table",
     "volatility_regimes",
 ]

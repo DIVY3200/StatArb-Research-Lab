@@ -27,7 +27,7 @@ import json
 import math
 import platform
 import sys
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -35,7 +35,7 @@ import numpy as np
 import pandas as pd
 
 from .backtester import BacktestConfig, BacktestResult, run_backtest
-from .cointegration import CointegrationResult, engle_granger_test
+from .cointegration import CointegrationResult, CointegrationSuite, cointegration_suite, engle_granger_test
 from .config import ResearchConfig, resolve_path, save_config_snapshot
 from .data_validation import AlignedPair
 from .hedge_ratio import HedgeRatioResult, estimate_hedge_ratio
@@ -104,6 +104,14 @@ class PairModel:
     coint: CointegrationResult
     spread: SpreadModel
     half_life: float
+    suite: CointegrationSuite | None = None  # reverse EG + Johansen, when the gate or config asks for them
+
+    def passes_gate(self, config: ResearchConfig) -> bool:
+        """Whether this fitting window may be traded under ``cointegration.gate`` (baseline: EG, A on B)."""
+        gate = config.cointegration.gate
+        if gate == "eg" or self.suite is None:
+            return self.coint.reject_null
+        return self.suite.passes(gate)
 
     def summary(self) -> dict[str, object]:
         return {
@@ -138,7 +146,12 @@ def fit_pair_model(log_prices: pd.DataFrame, config: ResearchConfig, name_a: str
     )
     spread_model = fit_spread_model(log_a, log_b, min_std=config.spread.min_std, hedge=hedge)
     hl = half_life(spread_model.spread(log_a, log_b))
-    return PairModel(hedge=hedge, coint=coint, spread=spread_model, half_life=hl)
+    suite = None
+    c = config.cointegration
+    if c.gate != "eg" or c.record_all_tests:
+        suite = cointegration_suite(log_a, log_b, c.significance, c.trend, c.autolag, c.min_observations,
+                                    c.johansen_det_order, c.johansen_k_ar_diff, name_a, name_b, eg_ab=coint)
+    return PairModel(hedge=hedge, coint=coint, spread=spread_model, half_life=hl, suite=suite)
 
 
 def signal_rules_from_config(config: ResearchConfig, entry_z: float | None = None, exit_z: float | None = None) -> SignalRules:
@@ -150,6 +163,23 @@ def signal_rules_from_config(config: ResearchConfig, entry_z: float | None = Non
     )
 
 
+def rules_for_model(config: ResearchConfig, half_life_bars: float | None = None, entry_z: float | None = None,
+                    exit_z: float | None = None) -> SignalRules:
+    """Signal rules for one fitted model: adds the half-life time stop when ``max_holding_half_lives`` is set.
+
+    The cap is ``ceil(max_holding_half_lives x half-life)`` bars (at least 1), combined with any fixed
+    ``max_holding_days`` (the smaller wins). Without the option, or with an undefined half-life, the
+    rules are exactly :func:`signal_rules_from_config`.
+    """
+    rules = signal_rules_from_config(config, entry_z, exit_z)
+    k = config.strategy.max_holding_half_lives
+    if k is None or half_life_bars is None or not np.isfinite(half_life_bars):
+        return rules
+    cap = max(1, int(math.ceil(k * half_life_bars)))
+    fixed = rules.max_holding_bars
+    return replace(rules, max_holding_bars=cap if fixed is None else min(fixed, cap))
+
+
 def build_signals(prices: pd.DataFrame, model: SpreadModel, rules: SignalRules) -> pd.DataFrame:
     """Spread, z-score and state-machine signals for one period using a frozen model."""
     logp = np.log(prices)
@@ -159,8 +189,13 @@ def build_signals(prices: pd.DataFrame, model: SpreadModel, rules: SignalRules) 
     return signals
 
 
-def backtest_period(prices: pd.DataFrame, model: SpreadModel, rules: SignalRules, bt_config: BacktestConfig) -> BacktestResult:
-    return run_backtest(prices, build_signals(prices, model, rules), model.hedge_ratio, bt_config)
+def backtest_period(prices: pd.DataFrame, model: SpreadModel, rules: SignalRules, bt_config: BacktestConfig,
+                    opens: pd.DataFrame | None = None) -> BacktestResult:
+    return run_backtest(prices, build_signals(prices, model, rules), model.hedge_ratio, bt_config, opens)
+
+
+def _slice(frame: pd.DataFrame | None, sl: slice) -> pd.DataFrame | None:
+    return None if frame is None else frame.iloc[sl]
 
 
 # --------------------------------------------------------------------------- period evaluation
@@ -188,13 +223,20 @@ def evaluate_period(
     bt_config: BacktestConfig,
     config: ResearchConfig,
     names: dict[str, str],
+    opens: pd.DataFrame | None = None,
+    trade: bool = True,
 ) -> PeriodEvaluation:
     period_prices = prices.iloc[split.slice]
-    result = backtest_period(period_prices, model, rules, bt_config)
+    period_opens = _slice(opens, split.slice)
+    if trade:
+        result = backtest_period(period_prices, model, rules, bt_config, period_opens)
+    else:  # static cointegration gate failed: the period is held flat
+        result = run_backtest(period_prices, _flat_signals(period_prices, model), model.hedge_ratio, bt_config,
+                              period_opens)
     m = config.metrics
-    metrics = strategy_metrics(result, m.risk_free_rate, m.periods_per_year, m.min_years_for_cagr)
-    bench = benchmark_returns(period_prices, names, m.risk_free_rate, m.periods_per_year)
-    comp = comparison_table(result.returns, result.gross_returns, bench, m.risk_free_rate, m.periods_per_year, m.min_years_for_cagr)
+    metrics = strategy_metrics(result, m.risk_free, m.periods_per_year, m.min_years_for_cagr)
+    bench = benchmark_returns(period_prices, names, m.risk_free, m.periods_per_year)
+    comp = comparison_table(result.returns, result.gross_returns, bench, m.risk_free, m.periods_per_year, m.min_years_for_cagr)
     return PeriodEvaluation(split.name, PERIOD_LABELS.get(split.name, split.name), split, rules, result, metrics, bench, comp)
 
 
@@ -205,6 +247,8 @@ def parameter_grid_search(
     bt_config: BacktestConfig,
     entry_grid=None,
     exit_grid=None,
+    opens: pd.DataFrame | None = None,
+    half_life_bars: float | None = None,
 ) -> pd.DataFrame:
     """Evaluate every valid (entry, exit) pair on the given period (validation or training only)."""
     entry_grid = entry_grid or config.robustness.entry_grid
@@ -217,9 +261,9 @@ def parameter_grid_search(
                 continue
             if config.strategy.stop_loss_z is not None and config.strategy.stop_loss_z <= entry:
                 continue
-            rules = signal_rules_from_config(config, entry_z=entry, exit_z=exit_)
-            result = backtest_period(prices, model, rules, bt_config)
-            stats = strategy_metrics(result, m.risk_free_rate, m.periods_per_year, m.min_years_for_cagr)
+            rules = rules_for_model(config, half_life_bars, entry_z=entry, exit_z=exit_)
+            result = backtest_period(prices, model, rules, bt_config, opens)
+            stats = strategy_metrics(result, m.risk_free, m.periods_per_year, m.min_years_for_cagr)
             rows.append(
                 {
                     "entry_z": entry,
@@ -261,15 +305,23 @@ def cost_sensitivity(
     config: ResearchConfig,
     bt_config: BacktestConfig,
     cost_grid_bps=None,
+    opens: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
-    """Re-run one period with different per-leg, per-side trading costs (commission + slippage)."""
+    """Re-run one period at different per-leg, per-side trading costs.
+
+    Generic profile: the grid value is commission + slippage. Market profiles (e.g. NSE): statutory
+    charges are fixed and the grid value is the slippage on top of them.
+    """
     cost_grid_bps = cost_grid_bps or config.robustness.cost_grid_bps
     m = config.metrics
     rows = []
     for bps in cost_grid_bps:
-        cfg = BacktestConfig(**{**bt_config.to_dict(), "commission_bps": float(bps), "slippage_bps": 0.0})
-        result = backtest_period(prices, model, rules, cfg)
-        stats = strategy_metrics(result, m.risk_free_rate, m.periods_per_year, m.min_years_for_cagr)
+        if bt_config.simple_costs:
+            cfg = replace(bt_config, commission_bps=float(bps), slippage_bps=0.0)
+        else:
+            cfg = replace(bt_config, slippage_bps=float(bps))
+        result = backtest_period(prices, model, rules, cfg, opens)
+        stats = strategy_metrics(result, m.risk_free, m.periods_per_year, m.min_years_for_cagr)
         rows.append(
             {
                 "cost_bps_per_leg_per_side": float(bps),
@@ -346,14 +398,19 @@ def run_walk_forward(
     rules: SignalRules | None = None,
     end_idx: int | None = None,
     names: dict[str, str] | None = None,
+    opens: pd.DataFrame | None = None,
+    first_eval_idx: int | None = None,
 ) -> WalkForwardResult:
     """Walk-forward evaluation over ``prices[:end_idx]`` with periodic re-estimation."""
     names = names or {"A": "A", "B": "B"}
+    config = config.for_pair(names["A"], names["B"])
     rules = rules or signal_rules_from_config(config)
     wf = config.walk_forward
     data = prices.iloc[:end_idx] if end_idx is not None else prices
+    data_opens = None if opens is None else opens.iloc[: len(data)]
     logp = np.log(data)
-    schedule = walk_forward_schedule(len(data), wf.train_window, wf.test_window, wf.expanding, wf.min_eval_observations)
+    schedule = walk_forward_schedule(len(data), wf.train_window, wf.test_window, wf.expanding, wf.min_eval_observations,
+                                     first_eval_idx=first_eval_idx)
     equity = float(config.portfolio.initial_capital)
     rows, dailies, trade_frames, signal_frames = [], [], [], []
 
@@ -369,7 +426,8 @@ def run_walk_forward(
             "fit_obs": window.fit_end_idx - window.fit_start_idx,
             "eval_obs": len(eval_prices),
         }
-        bt_config = BacktestConfig.from_research_config(config, initial_capital=equity)
+        bt_config = BacktestConfig.from_research_config(config, tickers=(names["A"], names["B"]), initial_capital=equity)
+        eval_opens = None if data_opens is None else data_opens.iloc[window.eval_start_idx:window.eval_end_idx]
         model: PairModel | None = None
         try:
             model = fit_pair_model(logp.iloc[fit_slice], config, names["A"], names["B"])
@@ -379,19 +437,28 @@ def run_walk_forward(
                 eg_p_value=model.coint.p_value, cointegrated=model.coint.reject_null,
                 half_life_bars=model.half_life,
             )
+            if model.suite is not None:
+                row.update({f"suite_{k}": v for k, v in model.suite.summary().items()})
         except ValueError as exc:
             row.update(hedge_ratio=np.nan, intercept=np.nan, spread_mean=np.nan, spread_std=np.nan,
                        eg_p_value=np.nan, cointegrated=False, half_life_bars=np.nan, note=str(exc))
 
-        trade = model is not None and (model.coint.reject_null or not wf.require_cointegration)
+        trade = model is not None and (model.passes_gate(config) or not wf.require_cointegration)
+        window_rules = rules
+        if model is not None and config.strategy.max_holding_half_lives:
+            window_rules = rules_for_model(config, model.half_life, rules.entry_z, rules.exit_z)
+            row["max_holding_bars"] = window_rules.max_holding_bars
         if trade:
-            signals = build_signals(eval_prices, model.spread, rules)
+            signals = build_signals(eval_prices, model.spread, window_rules)
         else:
             signals = _flat_signals(eval_prices, model.spread if model is not None else None)
-            row.setdefault("note", "Not traded: fit window failed the Engle-Granger test." if model is not None else row.get("note"))
-        result = run_backtest(eval_prices, signals, model.spread.hedge_ratio if model is not None else 0.0, bt_config)
+            failed = ("the Engle-Granger test" if config.cointegration.gate == "eg"
+                      else f"the {config.cointegration.gate} cointegration gate")
+            row.setdefault("note", f"Not traded: fit window failed {failed}." if model is not None else row.get("note"))
+        result = run_backtest(eval_prices, signals, model.spread.hedge_ratio if model is not None else 0.0, bt_config,
+                              eval_opens, accrue_first_bar=window.window_id > 1)
         m = config.metrics
-        stats = strategy_metrics(result, m.risk_free_rate, m.periods_per_year, min_years=math.inf)
+        stats = strategy_metrics(result, m.risk_free, m.periods_per_year, min_years=math.inf)
         row.update(
             traded=trade, completed_trades=stats["completed_trades"], window_return=stats["cumulative_return"],
             window_gross_return=stats["gross_cumulative_return"], window_max_drawdown=stats["max_drawdown"],
@@ -420,10 +487,10 @@ def run_walk_forward(
     combined = BacktestResult(daily, trades if not trades.empty else _empty_trades(), pd.concat(signal_frames),
                               float("nan"), BacktestConfig.from_research_config(config))
     m = config.metrics
-    metrics = strategy_metrics(combined, m.risk_free_rate, m.periods_per_year, m.min_years_for_cagr)
+    metrics = strategy_metrics(combined, m.risk_free, m.periods_per_year, m.min_years_for_cagr)
     oos_prices = data.loc[daily.index]
-    bench = benchmark_returns(oos_prices, names, m.risk_free_rate, m.periods_per_year)
-    comp = comparison_table(combined.returns, combined.gross_returns, bench, m.risk_free_rate, m.periods_per_year, m.min_years_for_cagr)
+    bench = benchmark_returns(oos_prices, names, m.risk_free, m.periods_per_year)
+    comp = comparison_table(combined.returns, combined.gross_returns, bench, m.risk_free, m.periods_per_year, m.min_years_for_cagr)
     return WalkForwardResult(pd.DataFrame(rows), daily, combined.trades, combined.signals, metrics, bench, comp, rules)
 
 
@@ -467,6 +534,8 @@ class PairResearchResult:
     test_revealed: bool
     warnings: list[str] = field(default_factory=list)
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).replace(microsecond=0).isoformat())
+    cointegration_suite: CointegrationSuite | None = None  # training window: EG both ways + Johansen
+    test_model: PairModel | None = None                    # set when evaluation.static_refit_before_test is on
 
     @property
     def names(self) -> dict[str, str]:
@@ -479,8 +548,17 @@ def run_pair_research(
     reveal_test: bool = False,
     include_walk_forward: bool = True,
 ) -> PairResearchResult:
-    """End-to-end static research workflow for one aligned pair (see module docstring)."""
+    """End-to-end static research workflow for one aligned pair (see module docstring).
+
+    Static-workflow options (all off in the baseline): ``evaluation.static_require_cointegration`` holds a
+    period flat when its model fails ``cointegration.gate``; ``evaluation.static_refit_before_test`` refits
+    the spread model on train + validation before the test period (data available at that time);
+    ``strategy.max_holding_half_lives`` adds a time stop at k x the fitted half-life. The pair's market
+    overrides (``markets:``) are applied first, and the result carries the resolved config.
+    """
+    config = config.for_pair(pair.ticker_a, pair.ticker_b)  # market overrides (no-op without ``markets``)
     prices = pair.prices
+    opens = pair.opens
     names = {"A": pair.ticker_a, "B": pair.ticker_b}
     s = config.splits
     splits = chronological_split(prices.index, s.train, s.validation, s.test)
@@ -492,26 +570,34 @@ def run_pair_research(
     train = splits["train"]
     model = fit_pair_model(logp.iloc[train.slice], config, names["A"], names["B"])
     warnings.extend(model.coint.warnings)
+    suite = _training_suite(logp.iloc[train.slice], config, names, model)
 
     research_end = len(prices) if reveal_test else splits["validation"].end_idx
     visible = prices.iloc[:research_end]
     spread = model.spread.spread(np.log(visible["A"]), np.log(visible["B"]))
     zscore = model.spread.zscore(np.log(visible["A"]), np.log(visible["B"]))
 
-    bt_config = BacktestConfig.from_research_config(config)
-    base_rules = signal_rules_from_config(config)
+    bt_config = BacktestConfig.from_research_config(config, tickers=(names["A"], names["B"]))
+    base_rules = rules_for_model(config, model.half_life)
+    ev = config.evaluation
+    tradable = model.passes_gate(config) if ev.static_require_cointegration else True
+    if not tradable:
+        warnings.append(f"Static cointegration gate ({config.cointegration.gate}) failed on the training fit: "
+                        "the training and validation periods are held flat.")
     periods = {
-        "train": evaluate_period(prices, train, model.spread, base_rules, bt_config, config, names),
-        "validation": evaluate_period(prices, splits["validation"], model.spread, base_rules, bt_config, config, names),
+        "train": evaluate_period(prices, train, model.spread, base_rules, bt_config, config, names, opens, tradable),
+        "validation": evaluate_period(prices, splits["validation"], model.spread, base_rules, bt_config, config, names,
+                                      opens, tradable),
     }
 
-    val_prices = prices.iloc[splits["validation"].slice]
-    grid = parameter_grid_search(val_prices, model.spread, config, bt_config)
-    ev = config.evaluation
+    val_slice = splits["validation"].slice
+    val_prices, val_opens = prices.iloc[val_slice], _slice(opens, val_slice)
+    grid = parameter_grid_search(val_prices, model.spread, config, bt_config, opens=val_opens,
+                                 half_life_bars=model.half_life)
     selected = select_parameters(grid, ev.selection_metric, ev.min_trades_for_selection)
 
     if ev.test_parameter_source == "validation_selected" and selected is not None:
-        test_rules = signal_rules_from_config(config, selected["entry_z"], selected["exit_z"])
+        test_rules = rules_for_model(config, model.half_life, selected["entry_z"], selected["exit_z"])
         test_params = {"source": "validation_selected", "entry_z": test_rules.entry_z, "exit_z": test_rules.exit_z}
     else:
         test_rules = base_rules
@@ -521,16 +607,33 @@ def run_pair_research(
                 "No validation grid point met the selection criteria; the pre-specified thresholds are used on the test period."
             )
 
-    costs = {"validation": cost_sensitivity(val_prices, model.spread, base_rules, config, bt_config)}
+    costs = {"validation": cost_sensitivity(val_prices, model.spread, base_rules, config, bt_config, opens=val_opens)}
+    test_model = None
     if reveal_test:
-        periods["test"] = evaluate_period(prices, splits["test"], model.spread, test_rules, bt_config, config, names)
-        test_prices = prices.iloc[splits["test"].slice]
-        costs["test"] = cost_sensitivity(test_prices, model.spread, test_rules, config, bt_config)
+        test_spread, test_tradable = model.spread, tradable
+        if ev.static_refit_before_test:
+            test_model = fit_pair_model(logp.iloc[: splits["validation"].end_idx], config, names["A"], names["B"])
+            test_rules = rules_for_model(config, test_model.half_life, test_rules.entry_z, test_rules.exit_z)
+            test_spread = test_model.spread
+            test_tradable = test_model.passes_gate(config) if ev.static_require_cointegration else True
+            test_params.update(model="refit on train + validation", refit_hedge_ratio=test_model.spread.hedge_ratio,
+                               refit_eg_p_value=test_model.coint.p_value, refit_fit_end=test_model.spread.fit_end)
+            sl = splits["test"].slice
+            log_test = np.log(prices.iloc[sl])
+            spread.iloc[sl] = test_spread.spread(log_test["A"], log_test["B"]).to_numpy()
+            zscore.iloc[sl] = test_spread.zscore(log_test["A"], log_test["B"]).to_numpy()
+            if not test_tradable:
+                warnings.append("Static cointegration gate failed on the refit model: the test period is held flat.")
+        periods["test"] = evaluate_period(prices, splits["test"], test_spread, test_rules, bt_config, config, names,
+                                          opens, test_tradable)
+        test_slice = splits["test"].slice
+        costs["test"] = cost_sensitivity(prices.iloc[test_slice], test_spread, test_rules, config, bt_config,
+                                         opens=_slice(opens, test_slice))
 
     walk_forward = None
     if include_walk_forward:
         try:
-            walk_forward = run_walk_forward(prices, config, base_rules, end_idx=research_end, names=names)
+            walk_forward = run_walk_forward(prices, config, base_rules, end_idx=research_end, names=names, opens=opens)
         except ValueError as exc:
             warnings.append(f"Walk-forward analysis skipped: {exc}")
 
@@ -538,7 +641,30 @@ def run_pair_research(
         config=config, pair=pair, splits=splits, model=model, research_end_idx=research_end, spread=spread,
         zscore=zscore, periods=periods, validation_grid=grid, selected_params=selected, test_params=test_params,
         cost_sensitivity=costs, walk_forward=walk_forward, test_revealed=reveal_test, warnings=warnings,
+        cointegration_suite=suite, test_model=test_model,
     )
+
+
+def static_tradable(result: PairResearchResult, period: str) -> bool:
+    """Whether the static workflow trades ``period`` (``evaluation.static_require_cointegration``)."""
+    if not result.config.evaluation.static_require_cointegration:
+        return True
+    model = result.test_model if period == "test" and result.test_model is not None else result.model
+    return model.passes_gate(result.config)
+
+
+def _training_suite(log_train: pd.DataFrame, config: ResearchConfig, names: dict[str, str],
+                    model: PairModel) -> CointegrationSuite | None:
+    """Reverse EG and Johansen on the training window (reuses the model's suite when it has one)."""
+    if model.suite is not None:
+        return model.suite
+    c = config.cointegration
+    try:
+        return cointegration_suite(log_train["A"], log_train["B"], c.significance, c.trend, c.autolag,
+                                   c.min_observations, c.johansen_det_order, c.johansen_k_ar_diff,
+                                   names["A"], names["B"], eg_ab=model.coint)
+    except ValueError:
+        return None
 
 
 # --------------------------------------------------------------------------- exports and snapshots
@@ -574,6 +700,8 @@ def statistical_tests_payload(result: PairResearchResult) -> dict[str, object]:
         "cointegration": result.model.coint.to_dict(),
         "spread_model": result.model.spread.to_dict(),
         "half_life_bars": result.model.half_life,
+        "cointegration_suite": result.cointegration_suite.to_dict() if result.cointegration_suite else None,
+        "test_model_refit": result.test_model.summary() if result.test_model else None,
     }
 
 
@@ -685,8 +813,10 @@ __all__ = [
     "result_tables",
     "run_metadata",
     "run_pair_research",
+    "rules_for_model",
     "run_walk_forward",
     "save_research_run",
+    "static_tradable",
     "select_parameters",
     "signal_rules_from_config",
     "statistical_tests_payload",
