@@ -147,7 +147,7 @@ docs/research/              v2: pre-registration, freeze record, holdout marker,
 docs/research/v3/           v3: pre-registration, development report, results
 scripts/generate_sample_data.py  Regenerates the synthetic sample CSVs
 notebooks/pairs_research.ipynb   Step-by-step research walkthrough
-tests/                      264 offline pytest tests (see Testing)
+tests/                      265 offline pytest tests (see Testing)
 .github/workflows/tests.yml CI: the test suite on Linux, Windows and macOS, Python 3.10 to 3.14
 data/raw/                   Download cache (git-ignored)   data/sample/  SYNTHETIC CSVs only
 reports/                    Timestamped research-run snapshots (git-ignored)
@@ -622,6 +622,9 @@ invalid parameter combinations (for example exit ≥ entry) each produce a speci
 * Cached downloads keep their original hash. If a cached file changes, a warning is raised. **Free providers may
   revise or remove historical data**, so a later re-download can differ; compare the hashes.
 * Synthetic data and tests are deterministic (fixed seeds). Exact package versions are in `requirements-lock.txt`.
+* Results are bit-identical on x86-64 Windows and Linux across Python 3.10 to 3.14 and the supported library ranges
+  (checked in CI). On Apple Silicon (arm64), Random Forest fits differ in the last digits (the golden test-period RF
+  Brier score is 0.2510946 instead of 0.2510814), so ML results there can differ slightly from the published runs.
 * Each pre-registered study keeps its pre-registration, freeze record and holdout marker in its own
   `holdout.protocol_dir` (`docs/research` for v2, `docs/research/v3` for v3). Every experiment run records the
   SHA-256 of the engine code, config and pre-registration. Committed result copies use `-text` in `.gitattributes`
@@ -632,7 +635,7 @@ invalid parameter combinations (for example exit ≥ entry) each produce a speci
 ## Testing
 
 ```bash
-pytest            # 264 tests, about 4-6 min, fully offline
+pytest            # 265 tests, about 4-6 min, fully offline
 ```
 
 | File | Covers |
@@ -652,7 +655,7 @@ pytest            # 264 tests, about 4-6 min, fully offline
 | `test_ml_strategy.py` | Hybrid = traditional when the model always agrees, hybrid never enters without confirmation, ML-only direction, entry rules, horizon exit vs renewal, exit band and stop-loss, no same-bar reversals, **next-bar execution**, end-of-sample liquidation, both-leg costs |
 | `test_ml_evaluation.py` | Purged training and validation rows, **identical dates and backtest settings for all variants**, test hidden until revealed, **validation outputs unaffected by test prices**, **training fit unaffected by validation prices**, ML walk-forward reproduces the original walk-forward for A, chaining, insufficient-data handling, exports and snapshots |
 | `test_app.py` | Headless Streamlit runs of the real `app.py` (synthetic data, revealed test, failed pair, invalid input, ML tabs, ML switched off, v2 protocol with B0) |
-| `test_baseline_preserved.py` | **The default config reproduces the pre-audit golden outputs exactly** (`tests/data/golden_baseline_synthetic.json`, captured before any fix) |
+| `test_baseline_preserved.py` | **The default config reproduces the pre-audit golden outputs exactly** (`tests/data/golden_baseline_synthetic.json`, captured before any fix). The statistical layer is compared on every platform; the ML outputs on x86-64, because Random Forest fits differ in the last digits on Apple Silicon |
 | `test_audit_fixes.py` | One or more regression tests per audit fix: **nested walk-forward is point-in-time** (later prices never change earlier windows), static-mode disclosure, unsafe option combination rejected, holdout schedule anchor, special-session detection / drop / point-in-time volume rule / exchange-specific dates, calmar selection, exported trade logs, holdout guard, unweighted LR matches the base rate, prevalence-baseline skill by hand, Sortino by hand, stationary bootstrap, bootstrap intervals, effective sample size, B0 control |
 | `test_experiment.py` | Union-calendar pooling, **repricing reproduces the walk-forward exactly**, cost sensitivity monotone, nested tuning required, pooled classification vs prevalence baseline by hand, **every branch of the pre-registered decision rules** |
 | `test_realism.py` | NSE rates by hand, generic model = original costs, lot rounding, **next-open fills earn only after the fill**, open-mode truncation invariance, close fallback, adjusted opens, futures round trip / rolls / lots by hand, cash interest base, risk-free schedules, **a flat book earns exactly the risk-free rate (zero excess)** in single periods and chained walk-forward windows |
@@ -825,7 +828,7 @@ Accurate wording, based on what this repository actually does:
 > spread mean reversion with causal features, purged chronological labels and validation-only tuning, and compared
 > traditional, ML-only and hybrid strategies on identical out-of-sample dates with walk-forward re-estimation.
 > Audited the platform, found and fixed a hyperparameter look-ahead and other defects behind opt-in, regression-
-> tested options (264 offline pytest tests, including golden-baseline, look-ahead and label-leakage checks,
+> tested options (265 offline pytest tests, including golden-baseline, look-ahead and label-leakage checks,
 > run in CI on Linux, Windows and macOS). Ran a pre-registered experiment with nested walk-forward tuning,
 > bootstrap confidence intervals and a one-time 2025–2026 holdout. The pre-registered decision rejected the
 > hypothesis: the ML models showed no out-of-sample skill and the pairs strategy showed no reliable edge after
