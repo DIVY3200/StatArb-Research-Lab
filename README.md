@@ -68,7 +68,6 @@ nothing it produces is financial advice.**
 12. [Research integrity and limitations](#research-integrity-and-limitations)
 13. [Troubleshooting](#troubleshooting)
 14. [Future improvements](#future-improvements)
-15. [Resume summary](#resume-summary)
 
 ---
 
