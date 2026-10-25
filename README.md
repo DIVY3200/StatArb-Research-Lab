@@ -2,11 +2,21 @@
 
 [![tests](https://github.com/DIVY3200/StatArb-Research-Lab/actions/workflows/tests.yml/badge.svg)](https://github.com/DIVY3200/StatArb-Research-Lab/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://statarb-research-lab.streamlit.app/)
 
 A reproducible research platform for studying **cointegration-based pairs trading** on daily stock prices, with
 a **machine-learning layer** that tests whether reversion classifiers improve on the traditional rules. It
 includes a modular Python package (`statarb`), a Streamlit dashboard, a command-line research script, a notebook,
 and an offline test suite.
+
+**Live demo: [statarb-research-lab.streamlit.app](https://statarb-research-lab.streamlit.app/)**. The demo opens on
+labelled synthetic data. Yahoo Finance often blocks downloads from cloud servers, so real tickers work best when
+you run the app locally. A free app that has been idle may take about a minute to wake up.
+
+![StatArb Research Lab dashboard: spread and z-score signals for HDFCBANK.NS / ICICIBANK.NS](docs/images/dashboard_spread_signals.png)
+
+*The dashboard on real Yahoo Finance data (HDFCBANK.NS / ICICIBANK.NS, 2015–2024). The spread and z-score use
+parameters frozen on the training period, with train / validation shading and signal markers.*
 
 > **Research questions.** Can a pairs-trading strategy based on statistically justified relationships between
 > two assets generate robust out-of-sample returns after transaction costs and realistic trading assumptions?
@@ -572,7 +582,9 @@ are the remaining steps.
 
 ## Dashboard
 
-`streamlit run app.py` opens at http://localhost:8501. The sidebar holds the data source, tickers, date range,
+`streamlit run app.py` opens at http://localhost:8501. A hosted copy runs at
+https://statarb-research-lab.streamlit.app/ (synthetic demo data; see the note at the top). The sidebar holds the
+data source, tickers, date range,
 split proportions, significance level, entry/exit/stop/max-holding settings, execution lag, commission, slippage,
 borrow fee, short-selling assumption, capital, gross-exposure limit, risk-free rate, walk-forward settings, a
 **research protocol** selector, the realism and robustness options (all off in the baseline), ML settings, the
@@ -602,6 +614,18 @@ ML tabs warn that walk-forward hyperparameters come from the static validation p
 | I. ML models | Target definition, samples and evaluation dates per period, model settings and tuning tables, classification metrics (training / validation / test clearly labelled), predicted probability vs actual target, confusion matrix, calibration, RF importance, LR coefficients |
 | J. Strategy comparison (A/B/C) | Metrics table, equity curves, drawdowns and transaction costs for A, B and C (LR and RF) on identical dates. Period switch: training, validation, test, walk-forward. Walk-forward per-window heatmap and table. Validation threshold grids. |
 | Export | CSV downloads (returns, equity, positions, trades, signals, metrics, ML predictions, metrics, calibration, importance, comparisons), statistical tests JSON, config YAML, run snapshot |
+
+**Cointegration tab: is the finding robust?** HDFCBANK.NS on ICICIBANK.NS passes Engle-Granger at 5% (p = 0.037),
+but the reverse regression (p = 0.063) and Johansen do not, so only one of the four gates passes.
+
+![Cointegration robustness checks for HDFCBANK.NS / ICICIBANK.NS: Engle-Granger both ways, Johansen, gate verdicts](docs/images/cointegration_robustness.png)
+
+**Strategy comparison under the v3 protocol** (TCS.NS / INFY.NS, walk-forward windows up to the end of
+validation). Every variant uses the same windows, gate, next-open fills, NSE costs and cash interest; the steady
+climbs are T-bill interest on idle cash. In the pooled v3 study no ML variant's edge over A is statistically
+significant, and the models show no predictive skill (ROC-AUC 0.50).
+
+![Walk-forward growth of variants A, B, C and B0 for TCS.NS / INFY.NS under the v3 protocol](docs/images/walk_forward_abc_tcs_infy.png)
 
 Errors are actionable: invalid or delisted tickers, failed downloads, insufficient history, degenerate pairs, and
 invalid parameter combinations (for example exit ≥ entry) each produce a specific message.
