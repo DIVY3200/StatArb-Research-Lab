@@ -814,34 +814,3 @@ other pairs). Results can change if the provider revises its data.
 * Probability calibration (Platt or isotonic) fitted on a separate calibration split, and abstention when |z| is
   outside the training range.
 * Meta-labelling targets defined on actual trade outcomes net of costs, rather than on spread moves.
-
----
-
-## Resume summary
-
-Accurate wording, based on what this repository actually does:
-
-> Built a Python statistical-arbitrage and machine-learning research platform (pandas, statsmodels,
-> scikit-learn, Plotly, Streamlit) for cointegration-based pairs trading. Features: training-only Engle-Granger
-> testing and hedge-ratio estimation, a finite-state z-score signal engine, and a two-leg backtester with delayed
-> execution and transaction, slippage and borrow costs. Added Logistic Regression and Random Forest classifiers of
-> spread mean reversion with causal features, purged chronological labels and validation-only tuning, and compared
-> traditional, ML-only and hybrid strategies on identical out-of-sample dates with walk-forward re-estimation.
-> Audited the platform, found and fixed a hyperparameter look-ahead and other defects behind opt-in, regression-
-> tested options (265 offline pytest tests, including golden-baseline, look-ahead and label-leakage checks,
-> run in CI on Linux, Windows and macOS). Ran a pre-registered experiment with nested walk-forward tuning,
-> bootstrap confidence intervals and a one-time 2025–2026 holdout. The pre-registered decision rejected the
-> hypothesis: the ML models showed no out-of-sample skill and the pairs strategy showed no reliable edge after
-> costs. Extended the engine with next-open execution, an NSE statutory cost model with single-stock-futures
-> shorting, cash interest at calendar-year rates, Engle-Granger in both directions plus Johansen gates and
-> point-in-time ML training rows, and pre-registered a v3 study with a 2026–2028 holdout.
-
-Do not claim the strategy, or the ML enhancement, is profitable or superior: the evidence above does not support
-that.
-
----
-
-*References:* Engle & Granger (1987), *Econometrica* 55(2); MacKinnon (2010), *Critical Values for Cointegration
-Tests*, Queen's Economics Dept. WP 1227; Gatev, Goetzmann & Rouwenhorst (2006), *Review of Financial Studies*
-19(3); Benjamini & Hochberg (1995), *JRSS B* 57(1); López de Prado (2018), *Advances in Financial Machine
-Learning*, ch. 7 (purging and embargoing).
